@@ -24,6 +24,9 @@ public:
     io_threads() const noexcept;
 
     std::uint32_t
+    http_max_connections() const noexcept;
+
+    std::uint32_t
     http_max_header_bytes() const noexcept;
 
     std::uint64_t
@@ -50,7 +53,9 @@ private:
     };
 
     std::uint32_t io_threads_{4};
-
+    
+    std::uint32_t http_max_connections_{1024};
+    
     std::uint32_t http_max_header_bytes_{
         16 * 1024
     };

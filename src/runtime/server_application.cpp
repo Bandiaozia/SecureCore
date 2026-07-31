@@ -29,11 +29,9 @@ ServerApplication::ServerApplication(
           logger_,
           router_,
           HttpLimits{
-              config_
-                  .http_max_header_bytes(),
+              config_.http_max_header_bytes(),
 
-              config_
-                  .http_max_body_bytes(),
+              config_.http_max_body_bytes(),
 
               std::chrono::seconds{
                   config_
@@ -48,7 +46,9 @@ ServerApplication::ServerApplication(
               std::chrono::seconds{
                   config_
                       .http_idle_timeout_seconds()
-              }
+              },
+
+              config_.http_max_connections()
           }
       ) {
     register_routes(router_);
