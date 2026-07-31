@@ -10,12 +10,15 @@
 
 namespace secure {
 
+class Logger;
+
 class TcpServer final {
 public:
     TcpServer(
         boost::asio::io_context& io_context,
         const std::string& listen_address,
-        std::uint16_t port
+        std::uint16_t port,
+        Logger& logger
     );
 
     void start();
@@ -25,7 +28,10 @@ public:
 private:
     void do_accept();
 
+    Logger& logger_;
+
     ConnectionManager connection_manager_;
+
     boost::asio::ip::tcp::acceptor acceptor_;
 };
 

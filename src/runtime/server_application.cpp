@@ -1,18 +1,25 @@
 #include "secure/runtime/server_application.hpp"
-#include <utility>
+
 #include <csignal>
-#include <iostream>
+#include <utility>
 
 namespace secure {
+
 ServerApplication::ServerApplication(
     ServerConfig config
 )
     : config_(std::move(config)),
-      signals_(io_context_, SIGINT, SIGTERM),
+      logger_(config_.log_file()),
+      signals_(
+          io_context_,
+          SIGINT,
+          SIGTERM
+      ),
       tcp_server_(
           io_context_,
           config_.listen_address(),
-          config_.listen_port()
+          config_.listen_port(),
+          logger_
       ) {
     signals_.async_wait(
         [this](
@@ -23,23 +30,30 @@ ServerApplication::ServerApplication(
                 return;
             }
 
-            std::cout
-                << "\nReceived signal "
-                << signal_number
-                << ", stopping server...\n";
+            logger_.info(
+                "Received signal ",
+                signal_number,
+                ", stopping server."
+            );
 
             stop();
         }
     );
 }
+
 int ServerApplication::run() {
-    std::cout << "SecureCore server starting...\n";
+    logger_.info(
+        "SecureCore server starting."
+    );
 
     tcp_server_.start();
 
     io_context_.run();
 
-    std::cout << "SecureCore server stopped.\n";
+    logger_.info(
+        "SecureCore server stopped."
+    );
+
     return 0;
 }
 

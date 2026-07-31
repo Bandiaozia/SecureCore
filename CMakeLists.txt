@@ -15,6 +15,7 @@ add_executable(
     src/net/tcp_session.cpp
     src/net/connection_manager.cpp
     src/config/server_config.cpp
+    src/log/logger.cpp
 )
 
 target_include_directories(

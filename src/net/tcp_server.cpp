@@ -1,20 +1,25 @@
 #include "secure/net/tcp_server.hpp"
-#include <boost/asio/ip/address.hpp>
+
+#include "secure/log/logger.hpp"
 #include "secure/net/tcp_session.hpp"
 
-#include <iostream>
 #include <memory>
 #include <utility>
+
+#include <boost/asio/ip/address.hpp>
 
 namespace secure {
 
 using boost::asio::ip::tcp;
+
 TcpServer::TcpServer(
     boost::asio::io_context& io_context,
     const std::string& listen_address,
-    std::uint16_t port
+    std::uint16_t port,
+    Logger& logger
 )
-    : acceptor_(io_context) {
+    : logger_(logger),
+      acceptor_(io_context) {
     const auto address =
         boost::asio::ip::make_address(
             listen_address
@@ -37,15 +42,17 @@ TcpServer::TcpServer(
         tcp::acceptor::max_listen_connections
     );
 
-    std::cout
-        << "TCP server configured on "
-        << listen_address
-        << ':'
-        << port
-        << ".\n";
+    logger_.info(
+        "TCP server configured on ",
+        listen_address,
+        ':',
+        port,
+        '.'
+    );
 }
+
 void TcpServer::start() {
-    std::cout << "TCP server started.\n";
+    logger_.info("TCP server started.");
     do_accept();
 }
 
@@ -55,15 +62,17 @@ void TcpServer::stop() {
     acceptor_.close(error);
 
     if (error) {
-        std::cerr
-            << "Failed to close TCP acceptor: "
-            << error.message()
-            << '\n';
+        logger_.error(
+            "Failed to close TCP acceptor: ",
+            error.message()
+        );
     }
 
     connection_manager_.stop_all();
 
-    std::cout << "All client connections stopped.\n";
+    logger_.info(
+        "All client connections stopped."
+    );
 }
 
 void TcpServer::do_accept() {
@@ -76,20 +85,23 @@ void TcpServer::do_accept() {
                 auto session =
                     std::make_shared<TcpSession>(
                         std::move(socket),
-                        connection_manager_
+                        connection_manager_,
+                        logger_
                     );
 
-                connection_manager_.start(session);
+                connection_manager_.start(
+                    session
+                );
 
-                std::cout
-                    << "Active connections: "
-                    << connection_manager_.size()
-                    << '\n';
+                logger_.info(
+                    "Active connections: ",
+                    connection_manager_.size()
+                );
             } else if (acceptor_.is_open()) {
-                std::cerr
-                    << "Accept failed: "
-                    << error.message()
-                    << '\n';
+                logger_.error(
+                    "Accept failed: ",
+                    error.message()
+                );
             }
 
             if (acceptor_.is_open()) {

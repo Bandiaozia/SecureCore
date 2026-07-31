@@ -22,7 +22,10 @@ std::string trim(std::string_view value) {
         value.find_last_not_of(" \t\r\n");
 
     return std::string(
-        value.substr(first, last - first + 1)
+        value.substr(
+            first,
+            last - first + 1
+        )
     );
 }
 
@@ -33,10 +36,15 @@ std::uint16_t parse_port(
     unsigned int port = 0;
 
     const char* begin = value.data();
-    const char* end = value.data() + value.size();
+    const char* end =
+        value.data() + value.size();
 
     const auto [position, error] =
-        std::from_chars(begin, end, port);
+        std::from_chars(
+            begin,
+            end,
+            port
+        );
 
     if (
         error != std::errc{} ||
@@ -62,7 +70,8 @@ ServerConfig ServerConfig::load_from_file(
 
     if (!input.is_open()) {
         throw std::runtime_error(
-            "Failed to open configuration file: " + path
+            "Failed to open configuration file: " +
+            path
         );
     }
 
@@ -74,13 +83,18 @@ ServerConfig ServerConfig::load_from_file(
     while (std::getline(input, raw_line)) {
         ++line_number;
 
-        const std::string line = trim(raw_line);
+        const std::string line =
+            trim(raw_line);
 
-        if (line.empty() || line.front() == '#') {
+        if (
+            line.empty() ||
+            line.front() == '#'
+        ) {
             continue;
         }
 
-        const auto separator = line.find('=');
+        const auto separator =
+            line.find('=');
 
         if (separator == std::string::npos) {
             throw std::runtime_error(
@@ -90,15 +104,19 @@ ServerConfig ServerConfig::load_from_file(
         }
 
         const std::string key =
-            trim(std::string_view(line).substr(
-                0,
-                separator
-            ));
+            trim(
+                std::string_view(line).substr(
+                    0,
+                    separator
+                )
+            );
 
         const std::string value =
-            trim(std::string_view(line).substr(
-                separator + 1
-            ));
+            trim(
+                std::string_view(line).substr(
+                    separator + 1
+                )
+            );
 
         if (key.empty() || value.empty()) {
             throw std::runtime_error(
@@ -111,7 +129,12 @@ ServerConfig ServerConfig::load_from_file(
             config.listen_address_ = value;
         } else if (key == "listen_port") {
             config.listen_port_ =
-                parse_port(value, line_number);
+                parse_port(
+                    value,
+                    line_number
+                );
+        } else if (key == "log_file") {
+            config.log_file_ = value;
         } else {
             throw std::runtime_error(
                 "Unknown configuration key '" +
@@ -133,6 +156,11 @@ ServerConfig::listen_address() const noexcept {
 std::uint16_t
 ServerConfig::listen_port() const noexcept {
     return listen_port_;
+}
+
+const std::string&
+ServerConfig::log_file() const noexcept {
+    return log_file_;
 }
 
 }  // namespace secure

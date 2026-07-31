@@ -10,13 +10,15 @@
 namespace secure {
 
 class ConnectionManager;
+class Logger;
 
 class TcpSession final
     : public std::enable_shared_from_this<TcpSession> {
 public:
     TcpSession(
         boost::asio::ip::tcp::socket socket,
-        ConnectionManager& connection_manager
+        ConnectionManager& connection_manager,
+        Logger& logger
     );
 
     void start();
@@ -26,14 +28,19 @@ public:
 private:
     void do_read();
 
-    void do_write(std::size_t bytes_to_write);
+    void do_write(
+        std::size_t bytes_to_write
+    );
 
     void handle_disconnect(
         const boost::system::error_code& error
     );
 
     boost::asio::ip::tcp::socket socket_;
+
     ConnectionManager& connection_manager_;
+
+    Logger& logger_;
 
     std::array<char, 4096> buffer_{};
 

@@ -1,8 +1,8 @@
 #include "secure/net/tcp_session.hpp"
 
+#include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
 
-#include <iostream>
 #include <utility>
 
 #include <boost/asio/buffer.hpp>
@@ -13,14 +13,16 @@ namespace secure {
 
 TcpSession::TcpSession(
     boost::asio::ip::tcp::socket socket,
-    ConnectionManager& connection_manager
+    ConnectionManager& connection_manager,
+    Logger& logger
 )
     : socket_(std::move(socket)),
-      connection_manager_(connection_manager) {
+      connection_manager_(connection_manager),
+      logger_(logger) {
 }
 
 void TcpSession::start() {
-    std::cout << "Client session started.\n";
+    logger_.info("Client session started.");
     do_read();
 }
 
@@ -57,17 +59,20 @@ void TcpSession::do_read() {
                 return;
             }
 
-            std::cout
-                << "Received "
-                << bytes_transferred
-                << " bytes.\n";
+            self->logger_.debug(
+                "Received ",
+                bytes_transferred,
+                " bytes."
+            );
 
             self->do_write(bytes_transferred);
         }
     );
 }
 
-void TcpSession::do_write(std::size_t bytes_to_write) {
+void TcpSession::do_write(
+    std::size_t bytes_to_write
+) {
     auto self = shared_from_this();
 
     boost::asio::async_write(
@@ -95,12 +100,13 @@ void TcpSession::handle_disconnect(
 ) {
     if (
         error != boost::asio::error::eof &&
-        error != boost::asio::error::operation_aborted
+        error !=
+            boost::asio::error::operation_aborted
     ) {
-        std::cerr
-            << "Connection error: "
-            << error.message()
-            << '\n';
+        logger_.warning(
+            "Connection ended with error: ",
+            error.message()
+        );
     }
 
     stop();
@@ -109,10 +115,10 @@ void TcpSession::handle_disconnect(
         shared_from_this()
     );
 
-    std::cout
-        << "Client disconnected. Active connections: "
-        << connection_manager_.size()
-        << '\n';
+    logger_.info(
+        "Client disconnected. Active connections: ",
+        connection_manager_.size()
+    );
 }
 
 }  // namespace secure
