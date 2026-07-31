@@ -1,5 +1,5 @@
 #include "secure/http/http_session.hpp"
-
+#include "secure/http/http_types.hpp"
 #include "secure/http/json_utils.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
@@ -13,6 +13,8 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/beast/core/error.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http.hpp>
 
 namespace secure {
