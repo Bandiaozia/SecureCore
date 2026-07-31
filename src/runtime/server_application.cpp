@@ -18,14 +18,15 @@ ServerApplication::ServerApplication(
     : config_(std::move(config)),
       logger_(config_.log_file()),
       rate_limiter_(
-          config_.http_rate_limit_requests(),
+          config_
+              .http_rate_limit_requests(),
           std::chrono::seconds{
               config_
                   .http_rate_limit_window_seconds()
           }
       ),
       database_(
-          "data/securecore.db"
+          config_.database_path()
       ),
       migration_runner_(database_),
       user_repository_(database_),
@@ -67,9 +68,6 @@ ServerApplication::ServerApplication(
                   .http_max_connections()
           }
       ) {
-    /*
-     * HTTP 服务接受请求前，先完成数据库迁移。
-     */
     migration_runner_.apply();
 
     logger_.info(
@@ -78,9 +76,6 @@ ServerApplication::ServerApplication(
         '.'
     );
 
-    /*
-     * 路由可以通过捕获数据库引用执行就绪检查。
-     */
     register_routes(
         router_,
         database_
@@ -125,11 +120,18 @@ int ServerApplication::run() {
 
     logger_.info(
         "HTTP rate limit: ",
-        config_.http_rate_limit_requests(),
+        config_
+            .http_rate_limit_requests(),
         " requests per ",
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
+    );
+
+    logger_.info(
+        "Database path: ",
+        config_.database_path(),
+        '.'
     );
 
     logger_.info(
@@ -178,7 +180,9 @@ int ServerApplication::run() {
 void ServerApplication::run_io_context() {
     try {
         io_context_.run();
-    } catch (const std::exception& error) {
+    } catch (
+        const std::exception& error
+    ) {
         logger_.error(
             "Unhandled I/O thread exception: ",
             error.what()
