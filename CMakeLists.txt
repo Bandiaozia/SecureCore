@@ -13,6 +13,7 @@ add_executable(
     src/runtime/server_application.cpp
     src/net/tcp_server.cpp
     src/net/tcp_session.cpp
+    src/net/connection_manager.cpp
 )
 
 target_include_directories(

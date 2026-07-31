@@ -5,6 +5,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
+#include "secure/net/connection_manager.hpp"
+
 namespace secure {
 
 class TcpServer final {
@@ -15,11 +17,13 @@ public:
     );
 
     void start();
+
     void stop();
 
 private:
     void do_accept();
 
+    ConnectionManager connection_manager_;
     boost::asio::ip::tcp::acceptor acceptor_;
 };
 

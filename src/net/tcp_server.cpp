@@ -34,7 +34,6 @@ TcpServer::TcpServer(
         << port
         << ".\n";
 }
-
 void TcpServer::start() {
     std::cout << "TCP server started.\n";
     do_accept();
@@ -42,6 +41,7 @@ void TcpServer::start() {
 
 void TcpServer::stop() {
     boost::system::error_code error;
+
     acceptor_.close(error);
 
     if (error) {
@@ -50,6 +50,10 @@ void TcpServer::stop() {
             << error.message()
             << '\n';
     }
+
+    connection_manager_.stop_all();
+
+    std::cout << "All client connections stopped.\n";
 }
 
 void TcpServer::do_accept() {
@@ -61,10 +65,16 @@ void TcpServer::do_accept() {
             if (!error) {
                 auto session =
                     std::make_shared<TcpSession>(
-                        std::move(socket)
+                        std::move(socket),
+                        connection_manager_
                     );
 
-                session->start();
+                connection_manager_.start(session);
+
+                std::cout
+                    << "Active connections: "
+                    << connection_manager_.size()
+                    << '\n';
             } else if (acceptor_.is_open()) {
                 std::cerr
                     << "Accept failed: "
