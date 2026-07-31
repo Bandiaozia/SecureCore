@@ -1,13 +1,19 @@
 #include "secure/runtime/server_application.hpp"
-
+#include <utility>
 #include <csignal>
 #include <iostream>
 
 namespace secure {
-
-ServerApplication::ServerApplication()
-    : signals_(io_context_, SIGINT, SIGTERM),
-      tcp_server_(io_context_, 8080) {
+ServerApplication::ServerApplication(
+    ServerConfig config
+)
+    : config_(std::move(config)),
+      signals_(io_context_, SIGINT, SIGTERM),
+      tcp_server_(
+          io_context_,
+          config_.listen_address(),
+          config_.listen_port()
+      ) {
     signals_.async_wait(
         [this](
             const boost::system::error_code& error,
@@ -26,7 +32,6 @@ ServerApplication::ServerApplication()
         }
     );
 }
-
 int ServerApplication::run() {
     std::cout << "SecureCore server starting...\n";
 

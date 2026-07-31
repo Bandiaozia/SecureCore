@@ -1,5 +1,5 @@
 #include "secure/net/tcp_server.hpp"
-
+#include <boost/asio/ip/address.hpp>
 #include "secure/net/tcp_session.hpp"
 
 #include <iostream>
@@ -9,13 +9,21 @@
 namespace secure {
 
 using boost::asio::ip::tcp;
-
 TcpServer::TcpServer(
     boost::asio::io_context& io_context,
+    const std::string& listen_address,
     std::uint16_t port
 )
     : acceptor_(io_context) {
-    const tcp::endpoint endpoint(tcp::v4(), port);
+    const auto address =
+        boost::asio::ip::make_address(
+            listen_address
+        );
+
+    const tcp::endpoint endpoint(
+        address,
+        port
+    );
 
     acceptor_.open(endpoint.protocol());
 
@@ -30,7 +38,9 @@ TcpServer::TcpServer(
     );
 
     std::cout
-        << "TCP server configured on port "
+        << "TCP server configured on "
+        << listen_address
+        << ':'
         << port
         << ".\n";
 }

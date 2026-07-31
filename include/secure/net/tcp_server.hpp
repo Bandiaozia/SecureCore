@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -13,6 +14,7 @@ class TcpServer final {
 public:
     TcpServer(
         boost::asio::io_context& io_context,
+        const std::string& listen_address,
         std::uint16_t port
     );
 
