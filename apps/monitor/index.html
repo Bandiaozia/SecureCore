@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Server Monitor</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d2991d;
+    --blue: #58a6ff;
+    --purple: #a371f7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { font-size: 24px; font-weight: 600; }
+  .header p { color: var(--muted); margin-top: 4px; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    padding: 24px 32px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .card-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .icon-bridge { background: #1a3a2a; color: var(--green); }
+  .icon-clash { background: #2a1a3a; color: var(--purple); }
+  .icon-wg { background: #1a2a3a; color: var(--blue); }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot-offline { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .dot-unknown { background: var(--yellow); }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(48,54,61,0.5);
+    font-size: 14px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--muted); }
+  .stat-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .uptime { color: var(--green); }
+  .refreshed {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 16px;
+  }
+  .error-banner {
+    background: rgba(248,81,73,0.1);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 0 32px 16px;
+    color: var(--red);
+    font-size: 14px;
+    display: none;
+  }
+  .error-banner.show { display: block; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Server Monitor</h1>
+  <p>实时监控 45.138.70.194 上的服务状态</p>
+</div>
+<div class="error-banner" id="error"></div>
+<div class="grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <div class="card-icon icon-bridge">&#9769;</div>
+        ClipBridge 中继
+      </div>
+      <span class="dot dot-unknown" id="bridge-dot"></span>
+    </div>
+    <div id="bridge-stats">
+      <div class="stat-row"><span class="stat-label">状态</span><span class="stat-value" id="bridge-status">--</span></div>
+      <div class="stat-row"><span class="stat-label">在线用户</span><span class="stat-value" id="bridge-users">--</span></div>
+      <div class="stat-row"><span class="stat-label">在线设备</span><span class="stat-value" id="bridge-devices">--</span></div>
+      <div class="stat-row"><span class="stat-label">运行时长</span><span class="stat-value uptime" id="bridge-uptime">--</span></div>
+      <div class="stat-row"><span class="stat-label">响应延迟</span><span class="stat-value" id="bridge-latency">--</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <div class="card-icon icon-clash">&#9733;</div>
+        Clash 代理
+      </div>
+      <span class="dot dot-unknown" id="clash-dot"></span>
+    </div>
+    <div id="clash-stats">
+      <div class="stat-row"><span class="stat-label">状态</span><span class="stat-value" id="clash-status">--</span></div>
+      <div class="stat-row"><span class="stat-label">运行时长</span><span class="stat-value uptime" id="clash-uptime">--</span></div>
+      <div class="stat-row"><span class="stat-label">响应延迟</span><span class="stat-value" id="clash-latency">--</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <div class="card-icon icon-wg">&#9881;</div>
+        WireGuard VPN
+      </div>
+      <span class="dot dot-unknown" id="wg-dot"></span>
+    </div>
+    <div id="wg-stats">
+      <div class="stat-row"><span class="stat-label">状态</span><span class="stat-value" id="wg-status">--</span></div>
+      <div class="stat-row"><span class="stat-label">响应延迟</span><span class="stat-value" id="wg-latency">--</span></div>
+    </div>
+  </div>
+</div>
+<div class="refreshed">每 5 秒自动刷新 · 上次更新: <span id="last-update">--</span></div>
+
+<script>
+const BASE = 'http://45.138.70.194:8080';
+let bridgeOnline = false;
+
+function setDot(id, online) {
+  const el = document.getElementById(id);
+  el.className = 'dot ' + (online === true ? 'dot-online' : online === false ? 'dot-offline' : 'dot-unknown');
+}
+
+function formatUptime(seconds) {
+  if (!seconds || seconds < 0) return '--';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts = [];
+  if (d > 0) parts.push(d + ' 天');
+  if (h > 0) parts.push(h + ' 小时');
+  if (m > 0) parts.push(m + ' 分钟');
+  return parts.join(' ') || '< 1 分钟';
+}
+
+async function checkBridge() {
+  const start = performance.now();
+  try {
+    const res = await fetch(BASE + '/stats', { signal: AbortSignal.timeout(5000) });
+    const latency = Math.round(performance.now() - start);
+    const data = await res.json();
+    bridgeOnline = true;
+    setDot('bridge-dot', true);
+    document.getElementById('bridge-status').textContent = '运行中';
+    document.getElementById('bridge-status').style.color = 'var(--green)';
+    document.getElementById('bridge-users').textContent = data.users ?? '--';
+    document.getElementById('bridge-devices').textContent = data.devices ?? '--';
+    document.getElementById('bridge-uptime').textContent = formatUptime(data.uptime_seconds);
+    document.getElementById('bridge-latency').textContent = latency + ' ms';
+  } catch(e) {
+    bridgeOnline = false;
+    setDot('bridge-dot', false);
+    document.getElementById('bridge-status').textContent = '无法连接';
+    document.getElementById('bridge-status').style.color = 'var(--red)';
+    document.getElementById('bridge-users').textContent = '--';
+    document.getElementById('bridge-devices').textContent = '--';
+    document.getElementById('bridge-uptime').textContent = '--';
+    document.getElementById('bridge-latency').textContent = '--';
+  }
+}
+
+async function checkClash() {
+  const start = performance.now();
+  try {
+    const res = await fetch(BASE + '/proxy/clash', { signal: AbortSignal.timeout(5000) });
+    const latency = Math.round(performance.now() - start);
+    const data = await res.json();
+    setDot('clash-dot', data.online === true);
+    document.getElementById('clash-status').textContent = data.online ? '运行中' : '离线';
+    document.getElementById('clash-status').style.color = data.online ? 'var(--green)' : 'var(--red)';
+    document.getElementById('clash-uptime').textContent = formatUptime(data.uptime_seconds);
+    document.getElementById('clash-latency').textContent = latency + ' ms';
+  } catch(e) {
+    setDot('clash-dot', false);
+    document.getElementById('clash-status').textContent = '无法连接';
+    document.getElementById('clash-status').style.color = 'var(--red)';
+    document.getElementById('clash-uptime').textContent = '--';
+    document.getElementById('clash-latency').textContent = '--';
+  }
+}
+
+async function checkWireGuard() {
+  const start = performance.now();
+  try {
+    const res = await fetch(BASE + '/proxy/wireguard', { signal: AbortSignal.timeout(5000) });
+    const latency = Math.round(performance.now() - start);
+    const data = await res.json();
+    setDot('wg-dot', data.online === true);
+    document.getElementById('wg-status').textContent = data.online ? '已连接' : '未连接';
+    document.getElementById('wg-status').style.color = data.online ? 'var(--green)' : 'var(--red)';
+    document.getElementById('wg-latency').textContent = latency + ' ms';
+  } catch(e) {
+    setDot('wg-dot', false);
+    document.getElementById('wg-status').textContent = '无法检测';
+    document.getElementById('wg-status').style.color = 'var(--red)';
+    document.getElementById('wg-latency').textContent = '--';
+  }
+}
+
+async function refresh() {
+  await Promise.all([checkBridge(), checkClash(), checkWireGuard()]);
+  document.getElementById('last-update').textContent = new Date().toLocaleTimeString('zh-CN');
+  document.getElementById('error').classList.remove('show');
+}
+
+// 如果中继客户端连不上，显示提示
+window.addEventListener('unhandledrejection', () => {});
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
