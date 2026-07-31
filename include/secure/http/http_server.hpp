@@ -13,6 +13,7 @@
 namespace secure {
 
 class Logger;
+class MiddlewarePipeline;
 class Router;
 
 class HttpServer final {
@@ -23,6 +24,7 @@ public:
         std::uint16_t port,
         Logger& logger,
         Router& router,
+        MiddlewarePipeline& middleware_pipeline,
         HttpLimits limits
     );
 
@@ -42,6 +44,8 @@ private:
     Logger& logger_;
 
     Router& router_;
+
+    MiddlewarePipeline& middleware_pipeline_;
 
     HttpLimits limits_;
 

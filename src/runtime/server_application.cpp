@@ -17,6 +17,13 @@ ServerApplication::ServerApplication(
 )
     : config_(std::move(config)),
       logger_(config_.log_file()),
+      rate_limiter_(
+          config_.http_rate_limit_requests(),
+          std::chrono::seconds{
+              config_
+                  .http_rate_limit_window_seconds()
+          }
+      ),
       signals_(
           io_context_,
           SIGINT,
@@ -28,6 +35,7 @@ ServerApplication::ServerApplication(
           config_.listen_port(),
           logger_,
           router_,
+          middleware_pipeline_,
           HttpLimits{
               config_
                   .http_max_header_bytes(),
@@ -48,10 +56,19 @@ ServerApplication::ServerApplication(
               std::chrono::seconds{
                   config_
                       .http_idle_timeout_seconds()
-              },  config_.http_max_connections()
+              },
+
+              config_
+                  .http_max_connections()
           }
       ) {
     register_routes(router_);
+
+    register_default_middlewares(
+        middleware_pipeline_,
+        rate_limiter_,
+        logger_
+    );
 
     signals_.async_wait(
         [this](
@@ -82,6 +99,15 @@ int ServerApplication::run() {
         "Starting I/O thread pool with ",
         config_.io_threads(),
         " threads."
+    );
+
+    logger_.info(
+        "HTTP rate limit: ",
+        config_.http_rate_limit_requests(),
+        " requests per ",
+        config_
+            .http_rate_limit_window_seconds(),
+        " second(s)."
     );
 
     http_server_.start();

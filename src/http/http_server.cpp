@@ -2,6 +2,7 @@
 
 #include "secure/http/http_session.hpp"
 #include "secure/http/http_types.hpp"
+#include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 
@@ -26,10 +27,12 @@ HttpServer::HttpServer(
     std::uint16_t port,
     Logger& logger,
     Router& router,
+    MiddlewarePipeline& middleware_pipeline,
     HttpLimits limits
 )
     : logger_(logger),
       router_(router),
+      middleware_pipeline_(middleware_pipeline),
       limits_(std::move(limits)),
       connection_manager_(
           limits_.max_connections
@@ -48,7 +51,9 @@ HttpServer::HttpServer(
         port
     );
 
-    acceptor_.open(endpoint.protocol());
+    acceptor_.open(
+        endpoint.protocol()
+    );
 
     acceptor_.set_option(
         tcp::acceptor::reuse_address(true)
@@ -195,7 +200,10 @@ void HttpServer::reject_connection(
         *response,
         boost::asio::bind_executor(
             strand_,
-            [stream, response](
+            [
+                stream,
+                response
+            ](
                 const boost::system::error_code&,
                 std::size_t
             ) {
@@ -254,6 +262,7 @@ void HttpServer::do_accept() {
                                 connection_manager_,
                                 logger_,
                                 router_,
+                                middleware_pipeline_,
                                 limits_
                             );
 

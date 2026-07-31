@@ -2,6 +2,8 @@
 
 #include "secure/config/server_config.hpp"
 #include "secure/http/http_server.hpp"
+#include "secure/http/middleware.hpp"
+#include "secure/http/rate_limiter.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 
@@ -30,6 +32,10 @@ private:
     Logger logger_;
 
     Router router_;
+
+    RateLimiter rate_limiter_;
+
+    MiddlewarePipeline middleware_pipeline_;
 
     boost::asio::io_context io_context_;
 

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include <boost/asio/any_io_executor.hpp>
@@ -21,6 +22,7 @@ namespace secure {
 
 class ConnectionManager;
 class Logger;
+class MiddlewarePipeline;
 class Router;
 
 class HttpSession final
@@ -34,6 +36,7 @@ public:
         ConnectionManager& connection_manager,
         Logger& logger,
         Router& router,
+        MiddlewarePipeline& middleware_pipeline,
         const HttpLimits& limits
     );
 
@@ -84,7 +87,11 @@ private:
 
     Router& router_;
 
+    MiddlewarePipeline& middleware_pipeline_;
+
     HttpLimits limits_;
+
+    std::string client_ip_;
 
     boost::beast::flat_buffer buffer_;
 

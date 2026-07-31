@@ -21,6 +21,8 @@ add_executable(
     src/http/router.cpp
     src/http/routes.cpp
     src/http/json_utils.cpp
+    src/http/rate_limiter.cpp
+    src/http/middleware.cpp
 )
 
 target_include_directories(
