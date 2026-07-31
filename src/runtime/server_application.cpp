@@ -48,7 +48,7 @@ ServerApplication::ServerApplication(
               std::chrono::seconds{
                   config_
                       .http_idle_timeout_seconds()
-              }
+              },  config_.http_max_connections()
           }
       ) {
     register_routes(router_);

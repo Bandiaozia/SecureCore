@@ -11,7 +11,11 @@ namespace secure {
 
 class ConnectionManager final {
 public:
-    void start(
+    explicit ConnectionManager(
+        std::size_t max_connections
+    );
+
+    bool start(
         const std::shared_ptr<Connection>& connection
     );
 
@@ -23,7 +27,13 @@ public:
 
     std::size_t size() const;
 
+    std::size_t capacity() const noexcept;
+
+    bool full() const;
+
 private:
+    const std::size_t max_connections_;
+
     mutable std::mutex mutex_;
 
     std::unordered_set<

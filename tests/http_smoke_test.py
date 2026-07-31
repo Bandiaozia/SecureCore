@@ -553,6 +553,220 @@ class SecureCoreHttpTests(unittest.TestCase):
             request_count
         )
 
+    def test_16_connection_limit(self) -> None:
+        server_path = Path(
+            SERVER_BINARY
+        ).resolve()
+
+        with tempfile.TemporaryDirectory(
+            prefix="securecore-connection-limit-"
+        ) as temporary_directory:
+            temporary_path = Path(
+                temporary_directory
+            )
+
+            port = find_free_port()
+
+            config_path = (
+                temporary_path / "server.conf"
+            )
+
+            log_path = (
+                temporary_path / "securecore.log"
+            )
+
+            config_path.write_text(
+                "\n".join(
+                    [
+                        f"listen_address={HOST}",
+                        f"listen_port={port}",
+                        f"log_file={log_path}",
+                        "io_threads=2",
+                        "http_max_connections=2",
+                        "http_max_header_bytes=16384",
+                        "http_max_body_bytes=1048576",
+                        "http_read_timeout_seconds=10",
+                        "http_write_timeout_seconds=3",
+                        "http_idle_timeout_seconds=10",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = (
+                temporary_path /
+                "server-output.log"
+            )
+
+            held_connections: list[
+                socket.socket
+            ] = []
+
+            with output_path.open(
+                "w+",
+                encoding="utf-8"
+            ) as output_file:
+                process = subprocess.Popen(
+                    [
+                        str(server_path),
+                        str(config_path),
+                    ],
+                    cwd=temporary_path,
+                    stdout=output_file,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+
+                try:
+                    deadline = (
+                        time.monotonic() + 5
+                    )
+
+                    while (
+                        time.monotonic() <
+                        deadline
+                    ):
+                        if process.poll() is not None:
+                            output_file.flush()
+                            output_file.seek(0)
+
+                            self.fail(
+                                "Connection-limit server "
+                                "exited during startup.\n"
+                                + output_file.read()
+                            )
+
+                        try:
+                            connection = (
+                                http.client
+                                .HTTPConnection(
+                                    HOST,
+                                    port,
+                                    timeout=1,
+                                )
+                            )
+
+                            connection.request(
+                                "GET",
+                                "/health",
+                            )
+
+                            response = (
+                                connection
+                                .getresponse()
+                            )
+
+                            body = (
+                                response
+                                .read()
+                                .decode("utf-8")
+                            )
+
+                            connection.close()
+
+                            if (
+                                response.status == 200
+                                and json.loads(body)
+                                == {"status": "ok"}
+                            ):
+                                break
+                        except (
+                            OSError,
+                            json.JSONDecodeError,
+                            http.client.HTTPException,
+                        ):
+                            time.sleep(0.05)
+                    else:
+                        self.fail(
+                            "Connection-limit server "
+                            "did not become ready"
+                        )
+
+                    # 占用两个连接，但不发送完整请求。
+                    for _ in range(2):
+                        sock = (
+                            socket.create_connection(
+                                (HOST, port),
+                                timeout=3,
+                            )
+                        )
+
+                        sock.sendall(
+                            b"GET /health HTTP/1.1\r\n"
+                            b"Host: 127.0.0.1\r\n"
+                        )
+
+                        held_connections.append(
+                            sock
+                        )
+
+                    time.sleep(0.1)
+
+                    # 第三个连接应被服务器直接拒绝。
+                    with socket.create_connection(
+                        (HOST, port),
+                        timeout=3,
+                    ) as third:
+                        third.settimeout(3)
+
+                        third.sendall(
+                            b"GET /health HTTP/1.1\r\n"
+                            b"Host: 127.0.0.1\r\n"
+                            b"Connection: close\r\n"
+                            b"\r\n"
+                        )
+
+                        chunks: list[bytes] = []
+
+                        while True:
+                            chunk = third.recv(4096)
+
+                            if not chunk:
+                                break
+
+                            chunks.append(chunk)
+
+                    raw_response = (
+                        b"".join(chunks).decode(
+                            "utf-8",
+                            errors="replace",
+                        )
+                    )
+
+                    self.assertTrue(
+                        raw_response.startswith(
+                            "HTTP/1.1 503"
+                        ),
+                        raw_response,
+                    )
+
+                    self.assertIn(
+                        "Retry-After: 1",
+                        raw_response,
+                    )
+
+                    self.assertIn(
+                        '{"error":'
+                        '"connection_limit_reached"}',
+                        raw_response,
+                    )
+
+                finally:
+                    for sock in held_connections:
+                        sock.close()
+
+                    if process.poll() is None:
+                        process.send_signal(
+                            signal.SIGTERM
+                        )
+
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
