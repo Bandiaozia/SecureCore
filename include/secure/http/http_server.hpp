@@ -1,12 +1,13 @@
 #pragma once
 
+#include "secure/http/http_limits.hpp"
+#include "secure/net/connection_manager.hpp"
+
 #include <cstdint>
 #include <string>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
-
-#include "secure/net/connection_manager.hpp"
 
 namespace secure {
 
@@ -20,7 +21,8 @@ public:
         const std::string& listen_address,
         std::uint16_t port,
         Logger& logger,
-        Router& router
+        Router& router,
+        HttpLimits limits
     );
 
     void start();
@@ -33,6 +35,8 @@ private:
     Logger& logger_;
 
     Router& router_;
+
+    HttpLimits limits_;
 
     ConnectionManager connection_manager_;
 

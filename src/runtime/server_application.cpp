@@ -1,7 +1,9 @@
 #include "secure/runtime/server_application.hpp"
 
+#include "secure/http/http_limits.hpp"
 #include "secure/http/routes.hpp"
 
+#include <chrono>
 #include <csignal>
 #include <utility>
 
@@ -22,7 +24,29 @@ ServerApplication::ServerApplication(
           config_.listen_address(),
           config_.listen_port(),
           logger_,
-          router_
+          router_,
+          HttpLimits{
+              config_
+                  .http_max_header_bytes(),
+
+              config_
+                  .http_max_body_bytes(),
+
+              std::chrono::seconds{
+                  config_
+                      .http_read_timeout_seconds()
+              },
+
+              std::chrono::seconds{
+                  config_
+                      .http_write_timeout_seconds()
+              },
+
+              std::chrono::seconds{
+                  config_
+                      .http_idle_timeout_seconds()
+              }
+          }
       ) {
     register_routes(router_);
 

@@ -18,10 +18,12 @@ HttpServer::HttpServer(
     const std::string& listen_address,
     std::uint16_t port,
     Logger& logger,
-    Router& router
+    Router& router,
+    HttpLimits limits
 )
     : logger_(logger),
       router_(router),
+      limits_(std::move(limits)),
       acceptor_(io_context) {
     const auto address =
         boost::asio::ip::make_address(
@@ -53,6 +55,20 @@ HttpServer::HttpServer(
         ':',
         port,
         '.'
+    );
+
+    logger_.info(
+        "HTTP limits: header=",
+        limits_.max_header_bytes,
+        " bytes, body=",
+        limits_.max_body_bytes,
+        " bytes, read_timeout=",
+        limits_.read_timeout.count(),
+        "s, write_timeout=",
+        limits_.write_timeout.count(),
+        "s, idle_timeout=",
+        limits_.idle_timeout.count(),
+        "s."
     );
 }
 
@@ -95,7 +111,8 @@ void HttpServer::do_accept() {
                         std::move(socket),
                         connection_manager_,
                         logger_,
-                        router_
+                        router_,
+                        limits_
                     );
 
                 connection_manager_.start(

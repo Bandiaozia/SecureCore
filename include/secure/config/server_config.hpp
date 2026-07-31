@@ -14,19 +14,54 @@ public:
     const std::string&
     listen_address() const noexcept;
 
-    std::uint16_t listen_port() const noexcept;
+    std::uint16_t
+    listen_port() const noexcept;
 
     const std::string&
     log_file() const noexcept;
 
+    std::uint32_t
+    http_max_header_bytes() const noexcept;
+
+    std::uint64_t
+    http_max_body_bytes() const noexcept;
+
+    std::uint32_t
+    http_read_timeout_seconds() const noexcept;
+
+    std::uint32_t
+    http_write_timeout_seconds() const noexcept;
+
+    std::uint32_t
+    http_idle_timeout_seconds() const noexcept;
+
 private:
-    std::string listen_address_{"0.0.0.0"};
+    std::string listen_address_{
+        "0.0.0.0"
+    };
 
     std::uint16_t listen_port_{8080};
 
     std::string log_file_{
         "logs/securecore.log"
     };
+
+    std::uint32_t http_max_header_bytes_{
+        16 * 1024
+    };
+
+    std::uint64_t http_max_body_bytes_{
+        1024 * 1024
+    };
+
+    std::uint32_t
+        http_read_timeout_seconds_{10};
+
+    std::uint32_t
+        http_write_timeout_seconds_{10};
+
+    std::uint32_t
+        http_idle_timeout_seconds_{30};
 };
 
 }  // namespace secure

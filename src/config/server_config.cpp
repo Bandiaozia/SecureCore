@@ -10,16 +10,22 @@ namespace secure {
 
 namespace {
 
-std::string trim(std::string_view value) {
+std::string trim(
+    std::string_view value
+) {
     const auto first =
-        value.find_first_not_of(" \t\r\n");
+        value.find_first_not_of(
+            " \t\r\n"
+        );
 
     if (first == std::string_view::npos) {
         return {};
     }
 
     const auto last =
-        value.find_last_not_of(" \t\r\n");
+        value.find_last_not_of(
+            " \t\r\n"
+        );
 
     return std::string(
         value.substr(
@@ -29,36 +35,41 @@ std::string trim(std::string_view value) {
     );
 }
 
-std::uint16_t parse_port(
+std::uint64_t parse_unsigned(
     const std::string& value,
-    std::size_t line_number
+    std::string_view key,
+    std::size_t line_number,
+    std::uint64_t minimum,
+    std::uint64_t maximum
 ) {
-    unsigned int port = 0;
+    std::uint64_t result = 0;
 
     const char* begin = value.data();
     const char* end =
-        value.data() + value.size();
+        begin + value.size();
 
     const auto [position, error] =
         std::from_chars(
             begin,
             end,
-            port
+            result
         );
 
     if (
         error != std::errc{} ||
         position != end ||
-        port == 0 ||
-        port > 65535
+        result < minimum ||
+        result > maximum
     ) {
         throw std::runtime_error(
-            "Invalid listen_port at line " +
+            "Invalid " +
+            std::string(key) +
+            " at line " +
             std::to_string(line_number)
         );
     }
 
-    return static_cast<std::uint16_t>(port);
+    return result;
 }
 
 }  // namespace
@@ -96,7 +107,10 @@ ServerConfig ServerConfig::load_from_file(
         const auto separator =
             line.find('=');
 
-        if (separator == std::string::npos) {
+        if (
+            separator ==
+            std::string::npos
+        ) {
             throw std::runtime_error(
                 "Missing '=' at configuration line " +
                 std::to_string(line_number)
@@ -129,12 +143,88 @@ ServerConfig ServerConfig::load_from_file(
             config.listen_address_ = value;
         } else if (key == "listen_port") {
             config.listen_port_ =
-                parse_port(
-                    value,
-                    line_number
+                static_cast<std::uint16_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        65535
+                    )
                 );
         } else if (key == "log_file") {
             config.log_file_ = value;
+        } else if (
+            key == "http_max_header_bytes"
+        ) {
+            config.http_max_header_bytes_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1024,
+                        1024ULL * 1024ULL
+                    )
+                );
+        } else if (
+            key == "http_max_body_bytes"
+        ) {
+            config.http_max_body_bytes_ =
+                parse_unsigned(
+                    value,
+                    key,
+                    line_number,
+                    1,
+                    1024ULL *
+                        1024ULL *
+                        1024ULL
+                );
+        } else if (
+            key ==
+            "http_read_timeout_seconds"
+        ) {
+            config
+                .http_read_timeout_seconds_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        3600
+                    )
+                );
+        } else if (
+            key ==
+            "http_write_timeout_seconds"
+        ) {
+            config
+                .http_write_timeout_seconds_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        3600
+                    )
+                );
+        } else if (
+            key ==
+            "http_idle_timeout_seconds"
+        ) {
+            config
+                .http_idle_timeout_seconds_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        3600
+                    )
+                );
         } else {
             throw std::runtime_error(
                 "Unknown configuration key '" +
@@ -161,6 +251,36 @@ ServerConfig::listen_port() const noexcept {
 const std::string&
 ServerConfig::log_file() const noexcept {
     return log_file_;
+}
+
+std::uint32_t
+ServerConfig::http_max_header_bytes()
+    const noexcept {
+    return http_max_header_bytes_;
+}
+
+std::uint64_t
+ServerConfig::http_max_body_bytes()
+    const noexcept {
+    return http_max_body_bytes_;
+}
+
+std::uint32_t
+ServerConfig::http_read_timeout_seconds()
+    const noexcept {
+    return http_read_timeout_seconds_;
+}
+
+std::uint32_t
+ServerConfig::http_write_timeout_seconds()
+    const noexcept {
+    return http_write_timeout_seconds_;
+}
+
+std::uint32_t
+ServerConfig::http_idle_timeout_seconds()
+    const noexcept {
+    return http_idle_timeout_seconds_;
 }
 
 }  // namespace secure
