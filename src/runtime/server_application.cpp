@@ -1,5 +1,7 @@
 #include "secure/runtime/server_application.hpp"
 
+#include "secure/http/routes.hpp"
+
 #include <csignal>
 #include <utility>
 
@@ -19,8 +21,11 @@ ServerApplication::ServerApplication(
           io_context_,
           config_.listen_address(),
           config_.listen_port(),
-          logger_
+          logger_,
+          router_
       ) {
+    register_routes(router_);
+
     signals_.async_wait(
         [this](
             const boost::system::error_code& error,

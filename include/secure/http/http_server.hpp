@@ -11,6 +11,7 @@
 namespace secure {
 
 class Logger;
+class Router;
 
 class HttpServer final {
 public:
@@ -18,7 +19,8 @@ public:
         boost::asio::io_context& io_context,
         const std::string& listen_address,
         std::uint16_t port,
-        Logger& logger
+        Logger& logger,
+        Router& router
     );
 
     void start();
@@ -29,6 +31,8 @@ private:
     void do_accept();
 
     Logger& logger_;
+
+    Router& router_;
 
     ConnectionManager connection_manager_;
 

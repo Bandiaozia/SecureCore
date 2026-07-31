@@ -16,6 +16,8 @@ add_executable(
     src/net/connection_manager.cpp
     src/http/http_server.cpp
     src/http/http_session.cpp
+    src/http/router.cpp
+    src/http/routes.cpp
 )
 
 target_include_directories(

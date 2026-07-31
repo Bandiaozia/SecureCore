@@ -5,6 +5,7 @@
 
 #include "secure/config/server_config.hpp"
 #include "secure/http/http_server.hpp"
+#include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 
 namespace secure {
@@ -23,6 +24,8 @@ private:
     ServerConfig config_;
 
     Logger logger_;
+
+    Router router_;
 
     boost::asio::io_context io_context_;
 

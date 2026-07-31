@@ -1,6 +1,7 @@
 #include "secure/http/http_server.hpp"
 
 #include "secure/http/http_session.hpp"
+#include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 
 #include <memory>
@@ -16,9 +17,11 @@ HttpServer::HttpServer(
     boost::asio::io_context& io_context,
     const std::string& listen_address,
     std::uint16_t port,
-    Logger& logger
+    Logger& logger,
+    Router& router
 )
     : logger_(logger),
+      router_(router),
       acceptor_(io_context) {
     const auto address =
         boost::asio::ip::make_address(
@@ -30,7 +33,9 @@ HttpServer::HttpServer(
         port
     );
 
-    acceptor_.open(endpoint.protocol());
+    acceptor_.open(
+        endpoint.protocol()
+    );
 
     acceptor_.set_option(
         tcp::acceptor::reuse_address(true)
@@ -52,7 +57,10 @@ HttpServer::HttpServer(
 }
 
 void HttpServer::start() {
-    logger_.info("HTTP server started.");
+    logger_.info(
+        "HTTP server started."
+    );
+
     do_accept();
 }
 
@@ -86,7 +94,8 @@ void HttpServer::do_accept() {
                     std::make_shared<HttpSession>(
                         std::move(socket),
                         connection_manager_,
-                        logger_
+                        logger_,
+                        router_
                     );
 
                 connection_manager_.start(

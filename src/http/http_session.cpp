@@ -1,8 +1,10 @@
 #include "secure/http/http_session.hpp"
 
+#include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
 
+#include <exception>
 #include <memory>
 #include <utility>
 
@@ -11,22 +13,26 @@
 
 namespace secure {
 
-namespace beast = boost::beast;
-namespace http = beast::http;
+namespace http = boost::beast::http;
 using boost::asio::ip::tcp;
 
 HttpSession::HttpSession(
     tcp::socket socket,
     ConnectionManager& connection_manager,
-    Logger& logger
+    Logger& logger,
+    Router& router
 )
     : socket_(std::move(socket)),
       connection_manager_(connection_manager),
-      logger_(logger) {
+      logger_(logger),
+      router_(router) {
 }
 
 void HttpSession::start() {
-    logger_.info("HTTP session started.");
+    logger_.info(
+        "HTTP session started."
+    );
+
     do_read();
 }
 
@@ -80,66 +86,52 @@ void HttpSession::handle_request() {
         request_.target()
     );
 
-    Response response{
-        http::status::ok,
-        request_.version()
-    };
-
-    response.set(
-        http::field::server,
-        "SecureCore"
-    );
-
-    response.set(
-        http::field::content_type,
-        "application/json"
-    );
-
-    response.keep_alive(
-        request_.keep_alive()
-    );
-
-    if (request_.target() == "/health") {
-        if (request_.method() != http::verb::get) {
-            response.result(
-                http::status::method_not_allowed
-            );
-
-            response.set(
-                http::field::allow,
-                "GET"
-            );
-
-            response.body() =
-                R"({"error":"method_not_allowed"})";
-        } else {
-            response.result(http::status::ok);
-
-            response.body() =
-                R"({"status":"ok"})";
-        }
-    } else {
-        response.result(
-            http::status::not_found
+    try {
+        send_response(
+            router_.dispatch(request_)
+        );
+    } catch (const std::exception& error) {
+        logger_.error(
+            "Unhandled HTTP handler exception: ",
+            error.what()
         );
 
+        HttpResponse response{
+            http::status::internal_server_error,
+            request_.version()
+        };
+
+        response.set(
+            http::field::server,
+            "SecureCore"
+        );
+
+        response.set(
+            http::field::content_type,
+            "application/json"
+        );
+
+        response.keep_alive(false);
+
         response.body() =
-            R"({"error":"not_found"})";
+            R"({"error":"internal_server_error"})";
+
+        response.prepare_payload();
+
+        send_response(
+            std::move(response)
+        );
     }
-
-    response.prepare_payload();
-
-    send_response(std::move(response));
 }
 
 void HttpSession::send_response(
-    Response response
+    HttpResponse response
 ) {
     const bool should_close =
         response.need_eof();
 
     auto shared_response =
-        std::make_shared<Response>(
+        std::make_shared<HttpResponse>(
             std::move(response)
         );
 

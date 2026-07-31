@@ -1,18 +1,19 @@
 #pragma once
 
+#include "secure/http/http_types.hpp"
+#include "secure/net/connection.hpp"
+
 #include <memory>
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/system/error_code.hpp>
-
-#include "secure/net/connection.hpp"
 
 namespace secure {
 
 class ConnectionManager;
 class Logger;
+class Router;
 
 class HttpSession final
     : public Connection,
@@ -21,7 +22,8 @@ public:
     HttpSession(
         boost::asio::ip::tcp::socket socket,
         ConnectionManager& connection_manager,
-        Logger& logger
+        Logger& logger,
+        Router& router
     );
 
     void start() override;
@@ -29,21 +31,13 @@ public:
     void stop() override;
 
 private:
-    using Request =
-        boost::beast::http::request<
-            boost::beast::http::string_body
-        >;
-
-    using Response =
-        boost::beast::http::response<
-            boost::beast::http::string_body
-        >;
-
     void do_read();
 
     void handle_request();
 
-    void send_response(Response response);
+    void send_response(
+        HttpResponse response
+    );
 
     void handle_disconnect(
         const boost::system::error_code& error
@@ -55,9 +49,11 @@ private:
 
     Logger& logger_;
 
+    Router& router_;
+
     boost::beast::flat_buffer buffer_;
 
-    Request request_;
+    HttpRequest request_;
 
     bool stopped_{false};
 };
