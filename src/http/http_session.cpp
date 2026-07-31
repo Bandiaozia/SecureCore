@@ -1,6 +1,7 @@
 #include "secure/http/http_session.hpp"
-#include "secure/http/http_types.hpp"
+
 #include "secure/http/json_utils.hpp"
+#include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
@@ -13,8 +14,6 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/beast/core/error.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http.hpp>
 
 namespace secure {
@@ -29,6 +28,7 @@ HttpSession::HttpSession(
     ConnectionManager& connection_manager,
     Logger& logger,
     Router& router,
+    MiddlewarePipeline& middleware_pipeline,
     const HttpLimits& limits
 )
     : stream_(std::move(socket)),
@@ -40,7 +40,23 @@ HttpSession::HttpSession(
       connection_manager_(connection_manager),
       logger_(logger),
       router_(router),
+      middleware_pipeline_(
+          middleware_pipeline
+      ),
       limits_(limits) {
+    boost::system::error_code error;
+
+    const auto endpoint =
+        stream_.socket().remote_endpoint(
+            error
+        );
+
+    if (error) {
+        client_ip_ = "unknown";
+    } else {
+        client_ip_ =
+            endpoint.address().to_string();
+    }
 }
 
 void HttpSession::start() {
@@ -76,7 +92,9 @@ void HttpSession::do_start() {
     started_ = true;
 
     logger_.info(
-        "HTTP session started."
+        "HTTP session started from ",
+        client_ip_,
+        '.'
     );
 
     do_read();
@@ -187,7 +205,9 @@ void HttpSession::handle_read(
 
     if (error == beast::error::timeout) {
         logger_.warning(
-            "HTTP read timeout."
+            "HTTP read timeout from ",
+            client_ip_,
+            '.'
         );
 
         handle_disconnect({});
@@ -199,16 +219,21 @@ void HttpSession::handle_read(
 }
 
 void HttpSession::handle_request() {
-    logger_.debug(
-        "HTTP request: ",
-        request_.method_string(),
-        ' ',
-        request_.target()
-    );
-
     try {
+        const RequestContext context{
+            request_,
+            client_ip_
+        };
+
         send_response(
-            router_.dispatch(request_)
+            middleware_pipeline_.execute(
+                context,
+                [this] {
+                    return router_.dispatch(
+                        request_
+                    );
+                }
+            )
         );
     } catch (
         const std::exception& error
@@ -328,7 +353,9 @@ void HttpSession::send_protocol_error(
     std::string_view error_code
 ) {
     logger_.warning(
-        "Rejected HTTP request: ",
+        "Rejected HTTP request from ",
+        client_ip_,
+        ": ",
         error_code,
         '.'
     );
@@ -371,7 +398,9 @@ void HttpSession::handle_disconnect(
         error != beast::error::timeout
     ) {
         logger_.warning(
-            "HTTP connection ended with error: ",
+            "HTTP connection from ",
+            client_ip_,
+            " ended with error: ",
             error.message()
         );
     }
@@ -383,7 +412,9 @@ void HttpSession::handle_disconnect(
     );
 
     logger_.info(
-        "HTTP client disconnected. Active connections: ",
+        "HTTP client ",
+        client_ip_,
+        " disconnected. Active connections: ",
         connection_manager_.size()
     );
 }

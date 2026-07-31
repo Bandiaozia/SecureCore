@@ -178,6 +178,33 @@ ServerConfig ServerConfig::load_from_file(
                         1000000
                     )
                 );
+        } else if (
+            key == "http_rate_limit_requests"
+        ) {
+            config.http_rate_limit_requests_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        0,
+                        1000000
+                    )
+                );
+        } else if (
+            key == "http_rate_limit_window_seconds"
+        ) {
+            config.http_rate_limit_window_seconds_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        3600
+                    )
+                );
+
 
         
         } else if (
@@ -288,6 +315,18 @@ std::uint32_t
 ServerConfig::http_max_connections()
     const noexcept {
     return http_max_connections_;
+}
+
+std::uint32_t
+ServerConfig::http_rate_limit_requests()
+    const noexcept {
+    return http_rate_limit_requests_;
+}
+
+std::uint32_t
+ServerConfig::http_rate_limit_window_seconds()
+    const noexcept {
+    return http_rate_limit_window_seconds_;
 }
 
 std::uint32_t

@@ -27,6 +27,12 @@ public:
     http_max_connections() const noexcept;
 
     std::uint32_t
+    http_rate_limit_requests() const noexcept;
+
+    std::uint32_t
+    http_rate_limit_window_seconds() const noexcept;
+
+    std::uint32_t
     http_max_header_bytes() const noexcept;
 
     std::uint64_t
@@ -56,6 +62,12 @@ private:
 
     std::uint32_t
         http_max_connections_{1024};
+
+    std::uint32_t
+        http_rate_limit_requests_{100};
+
+    std::uint32_t
+        http_rate_limit_window_seconds_{1};
 
     std::uint32_t http_max_header_bytes_{
         16 * 1024
