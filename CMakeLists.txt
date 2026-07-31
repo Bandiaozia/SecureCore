@@ -45,3 +45,27 @@ target_compile_options(
         -Wextra
         -Wpedantic
 )
+
+include(CTest)
+
+if(BUILD_TESTING)
+    find_package(
+        Python3
+        REQUIRED
+        COMPONENTS Interpreter
+    )
+
+    add_test(
+        NAME securecore-http-smoke
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_smoke_test.py
+            $<TARGET_FILE:secure-server>
+    )
+
+    set_tests_properties(
+        securecore-http-smoke
+        PROPERTIES
+            TIMEOUT 30
+    )
+endif()
