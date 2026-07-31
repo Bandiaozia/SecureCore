@@ -18,11 +18,22 @@ ServerApplication::ServerApplication(
     : config_(std::move(config)),
       logger_(config_.log_file()),
       rate_limiter_(
-          config_.http_rate_limit_requests(),
+          config_
+              .http_rate_limit_requests(),
           std::chrono::seconds{
               config_
                   .http_rate_limit_window_seconds()
           }
+      ),
+      database_(
+          config_.database_path()
+      ),
+      migration_runner_(database_),
+      user_repository_(database_),
+      password_hasher_(),
+      user_service_(
+          user_repository_,
+          password_hasher_
       ),
       signals_(
           io_context_,
@@ -62,7 +73,19 @@ ServerApplication::ServerApplication(
                   .http_max_connections()
           }
       ) {
-    register_routes(router_);
+    migration_runner_.apply();
+
+    logger_.info(
+        "Database initialized at ",
+        database_.path().string(),
+        '.'
+    );
+
+    register_routes(
+        router_,
+        database_,
+        user_service_
+    );
 
     register_default_middlewares(
         middleware_pipeline_,
@@ -103,11 +126,26 @@ int ServerApplication::run() {
 
     logger_.info(
         "HTTP rate limit: ",
-        config_.http_rate_limit_requests(),
+        config_
+            .http_rate_limit_requests(),
         " requests per ",
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
+    );
+
+    logger_.info(
+        "Database path: ",
+        config_.database_path(),
+        '.'
+    );
+
+    logger_.info(
+        "Database health check: ",
+        database_.healthy()
+            ? "ready"
+            : "unavailable",
+        '.'
     );
 
     http_server_.start();
@@ -148,7 +186,9 @@ int ServerApplication::run() {
 void ServerApplication::run_io_context() {
     try {
         io_context_.run();
-    } catch (const std::exception& error) {
+    } catch (
+        const std::exception& error
+    ) {
         logger_.error(
             "Unhandled I/O thread exception: ",
             error.what()

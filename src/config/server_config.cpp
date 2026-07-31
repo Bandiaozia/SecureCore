@@ -1,8 +1,10 @@
 #include "secure/config/server_config.hpp"
 
 #include <charconv>
+#include <cstddef>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -18,7 +20,10 @@ std::string trim(
             " \t\r\n"
         );
 
-    if (first == std::string_view::npos) {
+    if (
+        first ==
+        std::string_view::npos
+    ) {
         return {};
     }
 
@@ -44,7 +49,9 @@ std::uint64_t parse_unsigned(
 ) {
     std::uint64_t result = 0;
 
-    const char* begin = value.data();
+    const char* begin =
+        value.data();
+
     const char* end =
         begin + value.size();
 
@@ -91,7 +98,12 @@ ServerConfig ServerConfig::load_from_file(
     std::string raw_line;
     std::size_t line_number = 0;
 
-    while (std::getline(input, raw_line)) {
+    while (
+        std::getline(
+            input,
+            raw_line
+        )
+    ) {
         ++line_number;
 
         const std::string line =
@@ -132,16 +144,23 @@ ServerConfig ServerConfig::load_from_file(
                 )
             );
 
-        if (key.empty() || value.empty()) {
+        if (
+            key.empty() ||
+            value.empty()
+        ) {
             throw std::runtime_error(
                 "Empty key or value at configuration line " +
                 std::to_string(line_number)
             );
         }
 
-        if (key == "listen_address") {
+        if (
+            key == "listen_address"
+        ) {
             config.listen_address_ = value;
-        } else if (key == "listen_port") {
+        } else if (
+            key == "listen_port"
+        ) {
             config.listen_port_ =
                 static_cast<std::uint16_t>(
                     parse_unsigned(
@@ -152,19 +171,27 @@ ServerConfig ServerConfig::load_from_file(
                         65535
                     )
                 );
-        } else if (key == "log_file") {
+        } else if (
+            key == "log_file"
+        ) {
             config.log_file_ = value;
-        } else if (key == "io_threads") {
-    config.io_threads_ =
-        static_cast<std::uint32_t>(
-            parse_unsigned(
-                value,
-                key,
-                line_number,
-                1,
-                64
-            )
-        );
+        } else if (
+            key == "database_path"
+        ) {
+            config.database_path_ = value;
+        } else if (
+            key == "io_threads"
+        ) {
+            config.io_threads_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        64
+                    )
+                );
         } else if (
             key == "http_max_connections"
         ) {
@@ -179,9 +206,11 @@ ServerConfig ServerConfig::load_from_file(
                     )
                 );
         } else if (
-            key == "http_rate_limit_requests"
+            key ==
+            "http_rate_limit_requests"
         ) {
-            config.http_rate_limit_requests_ =
+            config
+                .http_rate_limit_requests_ =
                 static_cast<std::uint32_t>(
                     parse_unsigned(
                         value,
@@ -192,9 +221,11 @@ ServerConfig ServerConfig::load_from_file(
                     )
                 );
         } else if (
-            key == "http_rate_limit_window_seconds"
+            key ==
+            "http_rate_limit_window_seconds"
         ) {
-            config.http_rate_limit_window_seconds_ =
+            config
+                .http_rate_limit_window_seconds_ =
                 static_cast<std::uint32_t>(
                     parse_unsigned(
                         value,
@@ -204,9 +235,6 @@ ServerConfig ServerConfig::load_from_file(
                         3600
                     )
                 );
-
-
-        
         } else if (
             key == "http_max_header_bytes"
         ) {
@@ -292,22 +320,32 @@ ServerConfig ServerConfig::load_from_file(
 }
 
 const std::string&
-ServerConfig::listen_address() const noexcept {
+ServerConfig::listen_address()
+    const noexcept {
     return listen_address_;
 }
 
 std::uint16_t
-ServerConfig::listen_port() const noexcept {
+ServerConfig::listen_port()
+    const noexcept {
     return listen_port_;
 }
 
 const std::string&
-ServerConfig::log_file() const noexcept {
+ServerConfig::log_file()
+    const noexcept {
     return log_file_;
 }
 
+const std::string&
+ServerConfig::database_path()
+    const noexcept {
+    return database_path_;
+}
+
 std::uint32_t
-ServerConfig::io_threads() const noexcept {
+ServerConfig::io_threads()
+    const noexcept {
     return io_threads_;
 }
 
@@ -324,7 +362,8 @@ ServerConfig::http_rate_limit_requests()
 }
 
 std::uint32_t
-ServerConfig::http_rate_limit_window_seconds()
+ServerConfig::
+http_rate_limit_window_seconds()
     const noexcept {
     return http_rate_limit_window_seconds_;
 }
@@ -358,7 +397,5 @@ ServerConfig::http_idle_timeout_seconds()
     const noexcept {
     return http_idle_timeout_seconds_;
 }
-
-
 
 }  // namespace secure

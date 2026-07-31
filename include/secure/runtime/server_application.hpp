@@ -1,11 +1,16 @@
 #pragma once
 
 #include "secure/config/server_config.hpp"
+#include "secure/database/database.hpp"
+#include "secure/database/migration.hpp"
 #include "secure/http/http_server.hpp"
 #include "secure/http/middleware.hpp"
 #include "secure/http/rate_limiter.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/repository/user_repository.hpp"
+#include "secure/security/password_hasher.hpp"
+#include "secure/service/user_service.hpp"
 
 #include <atomic>
 
@@ -36,6 +41,16 @@ private:
     RateLimiter rate_limiter_;
 
     MiddlewarePipeline middleware_pipeline_;
+
+    Database database_;
+
+    MigrationRunner migration_runner_;
+
+    UserRepository user_repository_;
+
+    PasswordHasher password_hasher_;
+
+    UserService user_service_;
 
     boost::asio::io_context io_context_;
 
