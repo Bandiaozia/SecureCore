@@ -101,6 +101,11 @@ public:
         std::string_view access_token
     );
 
+    [[nodiscard]]
+    std::int64_t logout_all_access_token(
+        std::string_view access_token
+    );
+
 private:
     [[nodiscard]]
     AuthTokenPair issue_tokens(
