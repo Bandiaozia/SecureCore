@@ -11,11 +11,11 @@ add_executable(
     secure-server
     apps/secure_server/main.cpp
     src/runtime/server_application.cpp
-    src/net/tcp_server.cpp
-    src/net/tcp_session.cpp
-    src/net/connection_manager.cpp
     src/config/server_config.cpp
     src/log/logger.cpp
+    src/net/connection_manager.cpp
+    src/http/http_server.cpp
+    src/http/http_session.cpp
 )
 
 target_include_directories(

@@ -15,7 +15,7 @@ ServerApplication::ServerApplication(
           SIGINT,
           SIGTERM
       ),
-      tcp_server_(
+      http_server_(
           io_context_,
           config_.listen_address(),
           config_.listen_port(),
@@ -46,7 +46,7 @@ int ServerApplication::run() {
         "SecureCore server starting."
     );
 
-    tcp_server_.start();
+    http_server_.start();
 
     io_context_.run();
 
@@ -58,7 +58,7 @@ int ServerApplication::run() {
 }
 
 void ServerApplication::stop() {
-    tcp_server_.stop();
+    http_server_.stop();
     io_context_.stop();
 }
 

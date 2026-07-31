@@ -4,8 +4,8 @@
 #include <boost/asio/signal_set.hpp>
 
 #include "secure/config/server_config.hpp"
+#include "secure/http/http_server.hpp"
 #include "secure/log/logger.hpp"
-#include "secure/net/tcp_server.hpp"
 
 namespace secure {
 
@@ -28,7 +28,7 @@ private:
 
     boost::asio::signal_set signals_;
 
-    TcpServer tcp_server_;
+    HttpServer http_server_;
 };
 
 }  // namespace secure

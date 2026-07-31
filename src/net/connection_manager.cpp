@@ -1,39 +1,39 @@
 #include "secure/net/connection_manager.hpp"
 
-#include "secure/net/tcp_session.hpp"
-
 #include <vector>
 
 namespace secure {
 
 void ConnectionManager::start(
-    const std::shared_ptr<TcpSession>& session
+    const std::shared_ptr<Connection>& connection
 ) {
-    sessions_.insert(session);
-    session->start();
+    connections_.insert(connection);
+    connection->start();
 }
 
 void ConnectionManager::remove(
-    const std::shared_ptr<TcpSession>& session
+    const std::shared_ptr<Connection>& connection
 ) {
-    sessions_.erase(session);
+    connections_.erase(connection);
 }
 
 void ConnectionManager::stop_all() {
-    std::vector<std::shared_ptr<TcpSession>> sessions(
-        sessions_.begin(),
-        sessions_.end()
-    );
+    std::vector<std::shared_ptr<Connection>>
+        connections(
+            connections_.begin(),
+            connections_.end()
+        );
 
-    sessions_.clear();
+    connections_.clear();
 
-    for (const auto& session : sessions) {
-        session->stop();
+    for (const auto& connection : connections) {
+        connection->stop();
     }
 }
 
-std::size_t ConnectionManager::size() const noexcept {
-    return sessions_.size();
+std::size_t
+ConnectionManager::size() const noexcept {
+    return connections_.size();
 }
 
 }  // namespace secure

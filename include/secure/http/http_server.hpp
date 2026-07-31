@@ -12,9 +12,9 @@ namespace secure {
 
 class Logger;
 
-class TcpServer final {
+class HttpServer final {
 public:
-    TcpServer(
+    HttpServer(
         boost::asio::io_context& io_context,
         const std::string& listen_address,
         std::uint16_t port,

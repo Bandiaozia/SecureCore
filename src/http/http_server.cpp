@@ -1,7 +1,7 @@
-#include "secure/net/tcp_server.hpp"
+#include "secure/http/http_server.hpp"
 
+#include "secure/http/http_session.hpp"
 #include "secure/log/logger.hpp"
-#include "secure/net/tcp_session.hpp"
 
 #include <memory>
 #include <utility>
@@ -12,7 +12,7 @@ namespace secure {
 
 using boost::asio::ip::tcp;
 
-TcpServer::TcpServer(
+HttpServer::HttpServer(
     boost::asio::io_context& io_context,
     const std::string& listen_address,
     std::uint16_t port,
@@ -43,7 +43,7 @@ TcpServer::TcpServer(
     );
 
     logger_.info(
-        "TCP server configured on ",
+        "HTTP server configured on ",
         listen_address,
         ':',
         port,
@@ -51,19 +51,19 @@ TcpServer::TcpServer(
     );
 }
 
-void TcpServer::start() {
-    logger_.info("TCP server started.");
+void HttpServer::start() {
+    logger_.info("HTTP server started.");
     do_accept();
 }
 
-void TcpServer::stop() {
+void HttpServer::stop() {
     boost::system::error_code error;
 
     acceptor_.close(error);
 
     if (error) {
         logger_.error(
-            "Failed to close TCP acceptor: ",
+            "Failed to close HTTP acceptor: ",
             error.message()
         );
     }
@@ -71,11 +71,11 @@ void TcpServer::stop() {
     connection_manager_.stop_all();
 
     logger_.info(
-        "All client connections stopped."
+        "All HTTP connections stopped."
     );
 }
 
-void TcpServer::do_accept() {
+void HttpServer::do_accept() {
     acceptor_.async_accept(
         [this](
             const boost::system::error_code& error,
@@ -83,7 +83,7 @@ void TcpServer::do_accept() {
         ) {
             if (!error) {
                 auto session =
-                    std::make_shared<TcpSession>(
+                    std::make_shared<HttpSession>(
                         std::move(socket),
                         connection_manager_,
                         logger_
@@ -94,12 +94,12 @@ void TcpServer::do_accept() {
                 );
 
                 logger_.info(
-                    "Active connections: ",
+                    "Active HTTP connections: ",
                     connection_manager_.size()
                 );
             } else if (acceptor_.is_open()) {
                 logger_.error(
-                    "Accept failed: ",
+                    "HTTP accept failed: ",
                     error.message()
                 );
             }

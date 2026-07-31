@@ -4,22 +4,28 @@
 #include <memory>
 #include <unordered_set>
 
-namespace secure {
+#include "secure/net/connection.hpp"
 
-class TcpSession;
+namespace secure {
 
 class ConnectionManager final {
 public:
-    void start(const std::shared_ptr<TcpSession>& session);
+    void start(
+        const std::shared_ptr<Connection>& connection
+    );
 
-    void remove(const std::shared_ptr<TcpSession>& session);
+    void remove(
+        const std::shared_ptr<Connection>& connection
+    );
 
     void stop_all();
 
     std::size_t size() const noexcept;
 
 private:
-    std::unordered_set<std::shared_ptr<TcpSession>> sessions_;
+    std::unordered_set<
+        std::shared_ptr<Connection>
+    > connections_;
 };
 
 }  // namespace secure
