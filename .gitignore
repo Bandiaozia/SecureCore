@@ -1,1 +1,5 @@
 /secure-server
+/build/
+
+.vscode/*
+!.vscode/settings.json
