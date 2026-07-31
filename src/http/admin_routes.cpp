@@ -7,9 +7,14 @@
 #include "secure/service/admin_service.hpp"
 #include "secure/service/auth_service.hpp"
 
+#include <charconv>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 
 #include <boost/beast/http.hpp>
 
@@ -49,7 +54,7 @@ extract_bearer_token(
     const auto value =
         iterator->value();
 
-    constexpr std::string_view prefix{
+    const boost::beast::string_view prefix{
         "Bearer "
     };
 
@@ -66,6 +71,63 @@ extract_bearer_token(
     return std::string(
         value.data() + prefix.size(),
         value.size() - prefix.size()
+    );
+}
+
+std::optional<std::int64_t>
+parse_integer(
+    std::string_view value,
+    std::int64_t minimum,
+    std::int64_t maximum
+) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+
+    std::int64_t result = 0;
+
+    const char* begin =
+        value.data();
+
+    const char* end =
+        begin + value.size();
+
+    const auto [position, error] =
+        std::from_chars(
+            begin,
+            end,
+            result
+        );
+
+    if (
+        error != std::errc{} ||
+        position != end ||
+        result < minimum ||
+        result > maximum
+    ) {
+        return std::nullopt;
+    }
+
+    return result;
+}
+
+std::optional<std::int64_t>
+path_user_id(
+    const RouteParameters& parameters
+) {
+    const auto iterator =
+        parameters.find("id");
+
+    if (iterator == parameters.end()) {
+        return std::nullopt;
+    }
+
+    return parse_integer(
+        iterator->second,
+        1,
+        std::numeric_limits<
+            std::int64_t
+        >::max()
     );
 }
 
@@ -176,15 +238,75 @@ HttpResponse list_users_handler(
         return missing_token_response();
     }
 
+    std::int64_t limit = 50;
+    std::int64_t offset = 0;
+
+    if (
+        const auto value =
+            query_parameter(
+                request.target(),
+                "limit"
+            );
+        value.has_value()
+    ) {
+        const auto parsed =
+            parse_integer(
+                *value,
+                1,
+                100
+            );
+
+        if (!parsed.has_value()) {
+            return make_json_error(
+                http::status::bad_request,
+                "invalid_pagination"
+            );
+        }
+
+        limit = *parsed;
+    }
+
+    if (
+        const auto value =
+            query_parameter(
+                request.target(),
+                "offset"
+            );
+        value.has_value()
+    ) {
+        const auto parsed =
+            parse_integer(
+                *value,
+                0,
+                std::numeric_limits<
+                    std::int64_t
+                >::max()
+            );
+
+        if (!parsed.has_value()) {
+            return make_json_error(
+                http::status::bad_request,
+                "invalid_pagination"
+            );
+        }
+
+        offset = *parsed;
+    }
+
     try {
         const UserListResult result =
             admin_service.list_users(
-                *access_token
+                *access_token,
+                limit,
+                offset
             );
 
         Json users = Json::array();
 
-        for (const User& user : result.users) {
+        for (
+            const User& user :
+            result.users
+        ) {
             users.push_back(
                 make_public_user_json(user)
             );
@@ -193,7 +315,10 @@ HttpResponse list_users_handler(
         return make_json_response(
             http::status::ok,
             Json{
-                {"users", std::move(users)},
+                {
+                    "users",
+                    std::move(users)
+                },
                 {"total", result.total},
                 {"limit", result.limit},
                 {"offset", result.offset}
@@ -206,15 +331,73 @@ HttpResponse list_users_handler(
     }
 }
 
-HttpResponse set_user_status_handler(
+HttpResponse get_user_handler(
     AdminService& admin_service,
-    const HttpRequest& request
+    const HttpRequest& request,
+    const RouteParameters& parameters
 ) {
     const auto access_token =
         extract_bearer_token(request);
 
     if (!access_token.has_value()) {
         return missing_token_response();
+    }
+
+    const auto user_id =
+        path_user_id(parameters);
+
+    if (!user_id.has_value()) {
+        return make_json_error(
+            http::status::bad_request,
+            "invalid_user_id"
+        );
+    }
+
+    try {
+        const User user =
+            admin_service.get_user(
+                *access_token,
+                *user_id
+            );
+
+        return make_json_response(
+            http::status::ok,
+            Json{
+                {
+                    "user",
+                    make_public_user_json(
+                        user
+                    )
+                }
+            }
+        );
+    } catch (const AuthError& error) {
+        return auth_error_response(error);
+    } catch (const AdminError& error) {
+        return admin_error_response(error);
+    }
+}
+
+HttpResponse set_user_status_handler(
+    AdminService& admin_service,
+    const HttpRequest& request,
+    const RouteParameters& parameters
+) {
+    const auto access_token =
+        extract_bearer_token(request);
+
+    if (!access_token.has_value()) {
+        return missing_token_response();
+    }
+
+    const auto user_id =
+        path_user_id(parameters);
+
+    if (!user_id.has_value()) {
+        return make_json_error(
+            http::status::bad_request,
+            "invalid_user_id"
+        );
     }
 
     if (!has_json_content_type(request)) {
@@ -254,27 +437,8 @@ HttpResponse set_user_status_handler(
         );
     }
 
-    const auto user_id =
-        body.find("user_id");
-
     const auto enabled =
         body.find("enabled");
-
-    if (user_id == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "user_id_required"
-        );
-    }
-
-    if (
-        !user_id->is_number_integer()
-    ) {
-        return make_json_error(
-            http::status::bad_request,
-            "user_id_must_be_integer"
-        );
-    }
 
     if (enabled == body.end()) {
         return make_json_error(
@@ -294,7 +458,7 @@ HttpResponse set_user_status_handler(
         const UserStatusResult result =
             admin_service.set_user_enabled(
                 *access_token,
-                user_id->get<std::int64_t>(),
+                *user_id,
                 enabled->get<bool>()
             );
 
@@ -338,18 +502,30 @@ void register_admin_routes(
         }
     );
 
-    /*
-     * 当前 Router 暂时只有 get/post，
-     * 所以先使用 POST。
-     */
-    router.post(
-        "/v1/admin/users/status",
+    router.get(
+        "/v1/admin/users/{id}",
         [&admin_service](
-            const HttpRequest& request
+            const HttpRequest& request,
+            const RouteParameters& parameters
+        ) {
+            return get_user_handler(
+                admin_service,
+                request,
+                parameters
+            );
+        }
+    );
+
+    router.patch(
+        "/v1/admin/users/{id}/status",
+        [&admin_service](
+            const HttpRequest& request,
+            const RouteParameters& parameters
         ) {
             return set_user_status_handler(
                 admin_service,
-                request
+                request,
+                parameters
             );
         }
     );

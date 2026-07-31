@@ -183,4 +183,30 @@ if(BUILD_TESTING)
         PROPERTIES
             TIMEOUT 30
     )
+
+    add_executable(
+        securecore-router-test
+        tests/router_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-router-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-router-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-router-unit
+        COMMAND
+            securecore-router-test
+    )
+
 endif()

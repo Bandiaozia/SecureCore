@@ -75,6 +75,12 @@ public:
     );
 
     [[nodiscard]]
+    User get_user(
+        std::string_view access_token,
+        std::int64_t user_id
+    );
+
+    [[nodiscard]]
     UserStatusResult set_user_enabled(
         std::string_view access_token,
         std::int64_t target_user_id,

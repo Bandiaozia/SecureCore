@@ -112,6 +112,29 @@ UserListResult AdminService::list_users(
     };
 }
 
+User AdminService::get_user(
+    std::string_view access_token,
+    std::int64_t user_id
+) {
+    static_cast<void>(
+        require_admin(access_token)
+    );
+
+    const std::optional<User> user =
+        user_repository_.find_by_id(
+            user_id
+        );
+
+    if (!user.has_value()) {
+        throw AdminError(
+            AdminErrorCode::user_not_found,
+            "User does not exist"
+        );
+    }
+
+    return *user;
+}
+
 UserStatusResult
 AdminService::set_user_enabled(
     std::string_view access_token,
