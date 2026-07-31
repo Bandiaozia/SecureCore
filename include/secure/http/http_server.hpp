@@ -33,11 +33,6 @@ public:
 private:
     void do_accept();
 
-    void reject_connection
-    (
-    boost::asio::ip::tcp::socket socket
-    );
-
     void do_stop();
 
     Logger& logger_;

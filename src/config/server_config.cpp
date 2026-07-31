@@ -167,21 +167,6 @@ ServerConfig ServerConfig::load_from_file(
         );
         
         } else if (
-             key == "http_max_connections"
-) {
-    config.http_max_connections_ =
-        static_cast<std::uint32_t>(
-            parse_unsigned(
-                value,
-                key,
-                line_number,
-                1,
-                1000000
-            )
-        );
-
-
-        } else if (
             key == "http_max_header_bytes"
         ) {
             config.http_max_header_bytes_ =
@@ -283,12 +268,6 @@ ServerConfig::log_file() const noexcept {
 std::uint32_t
 ServerConfig::io_threads() const noexcept {
     return io_threads_;
-}
-
-std::uint32_t
-ServerConfig::http_max_connections()
-    const noexcept {
-    return http_max_connections_;
 }
 
 std::uint32_t
