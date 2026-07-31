@@ -431,6 +431,25 @@ bool AuthService::logout_access_token(
         );
 }
 
+std::int64_t
+AuthService::logout_all_access_token(
+    std::string_view access_token
+) {
+    /*
+     * 先验证 Access Token，
+     * 防止攻击者仅凭用户 ID 撤销会话。
+     */
+    const User user =
+        authenticate_access_token(
+            access_token
+        );
+
+    return auth_session_repository_
+        .revoke_all_for_user(
+            user.id
+        );
+}
+
 AuthTokenPair AuthService::issue_tokens(
     std::int64_t user_id,
     std::int64_t current_time

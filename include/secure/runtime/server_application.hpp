@@ -12,6 +12,7 @@
 #include "secure/repository/user_repository.hpp"
 #include "secure/security/password_hasher.hpp"
 #include "secure/security/token_service.hpp"
+#include "secure/service/admin_service.hpp"
 #include "secure/service/auth_service.hpp"
 #include "secure/service/user_service.hpp"
 
@@ -61,6 +62,8 @@ private:
     UserService user_service_;
 
     AuthService auth_service_;
+
+    AdminService admin_service_;
 
     boost::asio::io_context io_context_;
 

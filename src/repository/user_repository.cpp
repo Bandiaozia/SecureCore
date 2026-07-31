@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sqlite3.h>
 
@@ -539,9 +540,180 @@ LIMIT 1;
     );
 }
 
+
+std::vector<User> UserRepository::list(
+    std::int64_t limit,
+    std::int64_t offset
+) {
+    if (
+        limit <= 0 ||
+        limit > 100
+    ) {
+        throw std::invalid_argument(
+            "User list limit must be "
+            "between 1 and 100"
+        );
+    }
+
+    if (offset < 0) {
+        throw std::invalid_argument(
+            "User list offset must not "
+            "be negative"
+        );
+    }
+
+    return database_.with_locked_handle(
+        [
+            limit,
+            offset
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+SELECT
+    id,
+    username,
+    email,
+    password_hash,
+    role,
+    enabled,
+    created_at,
+    updated_at
+FROM users
+ORDER BY id ASC
+LIMIT ?1
+OFFSET ?2;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                limit
+            );
+
+            statement.bind_int64(
+                2,
+                offset
+            );
+
+            std::vector<User> users;
+
+            while (true) {
+                const int result =
+                    statement.step();
+
+                if (result == SQLITE_ROW) {
+                    users.push_back(
+                        read_user(statement)
+                    );
+
+                    continue;
+                }
+
+                if (result == SQLITE_DONE) {
+                    break;
+                }
+
+                throw UserRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Listing users",
+                        result
+                    )
+                );
+            }
+
+            return users;
+        }
+    );
+}
+
 std::int64_t UserRepository::count() {
     return database_.query_int64(
         "SELECT COUNT(*) FROM users;"
+    );
+}
+
+std::int64_t
+UserRepository::count_enabled_admins() {
+    return database_.query_int64(
+        R"SQL(
+SELECT COUNT(*)
+FROM users
+WHERE
+    role = 'admin'
+    AND enabled = 1;
+)SQL"
+    );
+}
+
+bool UserRepository::set_role(
+    std::int64_t user_id,
+    std::string_view role
+) {
+    if (user_id <= 0) {
+        return false;
+    }
+
+    if (
+        role != "user" &&
+        role != "admin"
+    ) {
+        throw std::invalid_argument(
+            "User role must be user or admin"
+        );
+    }
+
+    return database_.with_locked_handle(
+        [
+            user_id,
+            role
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+UPDATE users
+SET
+    role = ?1,
+    updated_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE id = ?2;
+)SQL"
+            };
+
+            statement.bind_text(
+                1,
+                role
+            );
+
+            statement.bind_int64(
+                2,
+                user_id
+            );
+
+            const int result =
+                statement.step();
+
+            if (result != SQLITE_DONE) {
+                throw UserRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Updating user role",
+                        result
+                    )
+                );
+            }
+
+            return (
+                sqlite3_changes(handle) > 0
+            );
+        }
     );
 }
 

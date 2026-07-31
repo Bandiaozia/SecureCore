@@ -575,6 +575,44 @@ HttpResponse logout_handler(
     return response;
 }
 
+HttpResponse logout_all_handler(
+    AuthService& auth_service,
+    const HttpRequest& request
+) {
+    const auto access_token =
+        extract_bearer_token(
+            request
+        );
+
+    if (!access_token.has_value()) {
+        return make_missing_token_response();
+    }
+
+    try {
+        const auto revoked_sessions =
+            auth_service
+                .logout_all_access_token(
+                    *access_token
+                );
+
+        return make_json_response(
+            http::status::ok,
+            Json{
+                {
+                    "revoked_sessions",
+                    revoked_sessions
+                }
+            }
+        );
+    } catch (
+        const AuthError& error
+    ) {
+        return make_auth_error_response(
+            error
+        );
+    }
+}
+
 HttpResponse me_handler(
     AuthService& auth_service,
     const HttpRequest& request
@@ -768,6 +806,18 @@ void register_routes(
             const HttpRequest& request
         ) {
             return logout_handler(
+                auth_service,
+                request
+            );
+        }
+    );
+
+    router.post(
+        "/v1/auth/logout-all",
+        [&auth_service](
+            const HttpRequest& request
+        ) {
+            return logout_all_handler(
                 auth_service,
                 request
             );
