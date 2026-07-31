@@ -53,9 +53,6 @@ public:
         std::string_view email
     );
 
-    /*
-     * 登录时允许输入用户名或邮箱。
-     */
     [[nodiscard]]
     std::optional<User>
     find_by_login(
@@ -70,6 +67,14 @@ public:
 
     [[nodiscard]]
     std::int64_t count();
+
+    [[nodiscard]]
+    std::int64_t count_enabled_admins();
+
+    bool set_role(
+        std::int64_t user_id,
+        std::string_view role
+    );
 
     bool set_enabled(
         std::int64_t user_id,
