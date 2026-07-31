@@ -24,6 +24,11 @@ ServerApplication::ServerApplication(
                   .http_rate_limit_window_seconds()
           }
       ),
+      database_(
+          "data/securecore.db"
+      ),
+      migration_runner_(database_),
+      user_repository_(database_),
       signals_(
           io_context_,
           SIGINT,
@@ -62,7 +67,24 @@ ServerApplication::ServerApplication(
                   .http_max_connections()
           }
       ) {
-    register_routes(router_);
+    /*
+     * HTTP 服务接受请求前，先完成数据库迁移。
+     */
+    migration_runner_.apply();
+
+    logger_.info(
+        "Database initialized at ",
+        database_.path().string(),
+        '.'
+    );
+
+    /*
+     * 路由可以通过捕获数据库引用执行就绪检查。
+     */
+    register_routes(
+        router_,
+        database_
+    );
 
     register_default_middlewares(
         middleware_pipeline_,
@@ -108,6 +130,14 @@ int ServerApplication::run() {
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
+    );
+
+    logger_.info(
+        "Database health check: ",
+        database_.healthy()
+            ? "ready"
+            : "unavailable",
+        '.'
     );
 
     http_server_.start();

@@ -9,6 +9,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(SQLite3 REQUIRED)
+
 add_executable(
     secure-server
     apps/secure_server/main.cpp
@@ -23,6 +25,9 @@ add_executable(
     src/http/json_utils.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
+    src/database/database.cpp
+    src/database/migration.cpp
+    src/repository/user_repository.cpp
 )
 
 target_include_directories(
@@ -46,6 +51,11 @@ target_compile_options(
         -Wall
         -Wextra
         -Wpedantic
+)
+
+target_link_libraries(
+    secure-server
+    PRIVATE SQLite::SQLite3
 )
 
 include(CTest)

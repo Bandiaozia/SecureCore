@@ -1,5 +1,6 @@
 #include "secure/http/routes.hpp"
 
+#include "secure/database/database.hpp"
 #include "secure/http/http_types.hpp"
 #include "secure/http/json_utils.hpp"
 #include "secure/http/router.hpp"
@@ -25,6 +26,29 @@ HttpResponse health_handler(
         http::status::ok,
         Json{
             {"status", "ok"}
+        }
+    );
+}
+
+HttpResponse ready_handler(
+    Database& database,
+    const HttpRequest&
+) {
+    if (database.healthy()) {
+        return make_json_response(
+            http::status::ok,
+            Json{
+                {"status", "ready"},
+                {"database", "ok"}
+            }
+        );
+    }
+
+    return make_json_response(
+        http::status::service_unavailable,
+        Json{
+            {"status", "not_ready"},
+            {"database", "unavailable"}
         }
     );
 }
@@ -115,11 +139,24 @@ HttpResponse echo_handler(
 }  // namespace
 
 void register_routes(
-    Router& router
+    Router& router,
+    Database& database
 ) {
     router.get(
         "/health",
         health_handler
+    );
+
+    router.get(
+        "/ready",
+        [&database](
+            const HttpRequest& request
+        ) {
+            return ready_handler(
+                database,
+                request
+            );
+        }
     );
 
     router.post(
