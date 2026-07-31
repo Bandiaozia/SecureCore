@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 
 namespace secure {
@@ -19,6 +20,8 @@ struct HttpLimits final {
     std::chrono::seconds write_timeout{10};
 
     std::chrono::seconds idle_timeout{30};
+
+    std::size_t max_connections{1024};
 };
 
 }  // namespace secure
