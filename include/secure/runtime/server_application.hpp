@@ -9,6 +9,8 @@
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/repository/user_repository.hpp"
+#include "secure/security/password_hasher.hpp"
+#include "secure/service/user_service.hpp"
 
 #include <atomic>
 
@@ -45,6 +47,10 @@ private:
     MigrationRunner migration_runner_;
 
     UserRepository user_repository_;
+
+    PasswordHasher password_hasher_;
+
+    UserService user_service_;
 
     boost::asio::io_context io_context_;
 

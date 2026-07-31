@@ -10,6 +10,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(SQLite3 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(
+    SODIUM
+    REQUIRED
+    IMPORTED_TARGET
+    libsodium
+)
 
 add_executable(
     secure-server
@@ -28,6 +35,8 @@ add_executable(
     src/database/database.cpp
     src/database/migration.cpp
     src/repository/user_repository.cpp
+    src/security/password_hasher.cpp
+    src/service/user_service.cpp
 )
 
 target_include_directories(
@@ -56,6 +65,11 @@ target_compile_options(
 target_link_libraries(
     secure-server
     PRIVATE SQLite::SQLite3
+)
+
+target_link_libraries(
+    secure-server
+    PRIVATE PkgConfig::SODIUM
 )
 
 include(CTest)

@@ -30,6 +30,11 @@ ServerApplication::ServerApplication(
       ),
       migration_runner_(database_),
       user_repository_(database_),
+      password_hasher_(),
+      user_service_(
+          user_repository_,
+          password_hasher_
+      ),
       signals_(
           io_context_,
           SIGINT,
@@ -78,7 +83,8 @@ ServerApplication::ServerApplication(
 
     register_routes(
         router_,
-        database_
+        database_,
+        user_service_
     );
 
     register_default_middlewares(

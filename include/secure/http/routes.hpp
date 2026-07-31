@@ -4,10 +4,12 @@ namespace secure {
 
 class Database;
 class Router;
+class UserService;
 
 void register_routes(
     Router& router,
-    Database& database
+    Database& database,
+    UserService& user_service
 );
 
 }  // namespace secure
