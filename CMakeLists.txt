@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 project(SecureCore LANGUAGES CXX)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +34,7 @@ target_link_libraries(
     PRIVATE
         Boost::system
         nlohmann_json::nlohmann_json
+        Threads::Threads
 )
 
 

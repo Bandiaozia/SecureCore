@@ -9,6 +9,8 @@
 #include <memory>
 #include <utility>
 
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/http.hpp>
@@ -28,6 +30,11 @@ HttpSession::HttpSession(
     const HttpLimits& limits
 )
     : stream_(std::move(socket)),
+      strand_(
+          boost::asio::make_strand(
+              stream_.get_executor()
+          )
+      ),
       connection_manager_(connection_manager),
       logger_(logger),
       router_(router),
@@ -35,6 +42,37 @@ HttpSession::HttpSession(
 }
 
 void HttpSession::start() {
+    auto self = shared_from_this();
+
+    boost::asio::dispatch(
+        strand_,
+        [self] {
+            self->do_start();
+        }
+    );
+}
+
+void HttpSession::stop() {
+    auto self = shared_from_this();
+
+    boost::asio::dispatch(
+        strand_,
+        [self] {
+            self->do_stop();
+        }
+    );
+}
+
+void HttpSession::do_start() {
+    if (
+        started_ ||
+        stopped_
+    ) {
+        return;
+    }
+
+    started_ = true;
+
     logger_.info(
         "HTTP session started."
     );
@@ -42,7 +80,7 @@ void HttpSession::start() {
     do_read();
 }
 
-void HttpSession::stop() {
+void HttpSession::do_stop() {
     if (stopped_) {
         return;
     }
@@ -93,18 +131,25 @@ void HttpSession::do_read() {
         stream_,
         buffer_,
         *parser_,
-        [self](
-            const boost::system::error_code& error,
-            std::size_t
-        ) {
-            self->handle_read(error);
-        }
+        boost::asio::bind_executor(
+            strand_,
+            [self](
+                const boost::system::error_code& error,
+                std::size_t
+            ) {
+                self->handle_read(error);
+            }
+        )
     );
 }
 
 void HttpSession::handle_read(
     const boost::system::error_code& error
 ) {
+    if (stopped_) {
+        return;
+    }
+
     if (!error) {
         request_ = parser_->release();
 
@@ -200,6 +245,10 @@ void HttpSession::handle_request() {
 void HttpSession::send_response(
     HttpResponse response
 ) {
+    if (stopped_) {
+        return;
+    }
+
     const bool should_close =
         response.need_eof();
 
@@ -217,27 +266,48 @@ void HttpSession::send_response(
     http::async_write(
         stream_,
         *shared_response,
-        [
-            self,
-            shared_response,
-            should_close
-        ](
-            const boost::system::error_code& error,
-            std::size_t
-        ) {
-            static_cast<void>(
-                shared_response
-            );
+        boost::asio::bind_executor(
+            strand_,
+            [
+                self,
+                shared_response,
+                should_close
+            ](
+                const boost::system::error_code& error,
+                std::size_t
+            ) {
+                static_cast<void>(
+                    shared_response
+                );
 
-            if (error) {
-                if (
-                    error ==
-                    beast::error::timeout
-                ) {
-                    self->logger_.warning(
-                        "HTTP write timeout."
+                if (self->stopped_) {
+                    return;
+                }
+
+                if (error) {
+                    if (
+                        error ==
+                        beast::error::timeout
+                    ) {
+                        self->logger_.warning(
+                            "HTTP write timeout."
+                        );
+
+                        self->handle_disconnect(
+                            {}
+                        );
+
+                        return;
+                    }
+
+                    self->handle_disconnect(
+                        error
                     );
 
+                    return;
+                }
+
+                if (should_close) {
                     self->handle_disconnect(
                         {}
                     );
@@ -245,23 +315,9 @@ void HttpSession::send_response(
                     return;
                 }
 
-                self->handle_disconnect(
-                    error
-                );
-
-                return;
+                self->do_read();
             }
-
-            if (should_close) {
-                self->handle_disconnect(
-                    {}
-                );
-
-                return;
-            }
-
-            self->do_read();
-        }
+        )
     );
 }
 
@@ -318,7 +374,7 @@ void HttpSession::handle_disconnect(
         );
     }
 
-    stop();
+    do_stop();
 
     connection_manager_.remove(
         shared_from_this()

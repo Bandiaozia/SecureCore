@@ -5,7 +5,10 @@
 
 #include <chrono>
 #include <csignal>
+#include <exception>
+#include <thread>
 #include <utility>
+#include <vector>
 
 namespace secure {
 
@@ -75,9 +78,39 @@ int ServerApplication::run() {
         "SecureCore server starting."
     );
 
+    logger_.info(
+        "Starting I/O thread pool with ",
+        config_.io_threads(),
+        " threads."
+    );
+
     http_server_.start();
 
-    io_context_.run();
+    std::vector<std::thread> workers;
+
+    workers.reserve(
+        config_.io_threads() - 1
+    );
+
+    for (
+        std::uint32_t index = 1;
+        index < config_.io_threads();
+        ++index
+    ) {
+        workers.emplace_back(
+            [this] {
+                run_io_context();
+            }
+        );
+    }
+
+    run_io_context();
+
+    for (auto& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
 
     logger_.info(
         "SecureCore server stopped."
@@ -86,9 +119,38 @@ int ServerApplication::run() {
     return 0;
 }
 
+void ServerApplication::run_io_context() {
+    try {
+        io_context_.run();
+    } catch (const std::exception& error) {
+        logger_.error(
+            "Unhandled I/O thread exception: ",
+            error.what()
+        );
+
+        stop();
+    } catch (...) {
+        logger_.error(
+            "Unknown I/O thread exception."
+        );
+
+        stop();
+    }
+}
+
 void ServerApplication::stop() {
+    bool expected = false;
+
+    if (
+        !stopping_.compare_exchange_strong(
+            expected,
+            true
+        )
+    ) {
+        return;
+    }
+
     http_server_.stop();
-    io_context_.stop();
 }
 
 }  // namespace secure

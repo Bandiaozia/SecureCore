@@ -9,7 +9,9 @@
 #include <optional>
 #include <string_view>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http/parser.hpp>
@@ -45,6 +47,10 @@ private:
             boost::beast::http::string_body
         >;
 
+    void do_start();
+
+    void do_stop();
+
     void do_read();
 
     void handle_read(
@@ -68,13 +74,17 @@ private:
 
     boost::beast::tcp_stream stream_;
 
+    boost::asio::strand<
+        boost::asio::any_io_executor
+    > strand_;
+
     ConnectionManager& connection_manager_;
 
     Logger& logger_;
 
     Router& router_;
 
-    const HttpLimits& limits_;
+    HttpLimits limits_;
 
     boost::beast::flat_buffer buffer_;
 
@@ -85,6 +95,8 @@ private:
     std::size_t completed_requests_{0};
 
     bool stopped_{false};
+
+    bool started_{false};
 };
 
 }  // namespace secure

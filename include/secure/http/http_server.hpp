@@ -8,6 +8,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/strand.hpp>
 
 namespace secure {
 
@@ -32,6 +33,8 @@ public:
 private:
     void do_accept();
 
+    void do_stop();
+
     Logger& logger_;
 
     Router& router_;
@@ -40,7 +43,13 @@ private:
 
     ConnectionManager connection_manager_;
 
+    boost::asio::strand<
+        boost::asio::io_context::executor_type
+    > strand_;
+
     boost::asio::ip::tcp::acceptor acceptor_;
+
+    bool stopped_{false};
 };
 
 }  // namespace secure

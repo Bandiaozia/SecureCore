@@ -154,6 +154,18 @@ ServerConfig ServerConfig::load_from_file(
                 );
         } else if (key == "log_file") {
             config.log_file_ = value;
+        } else if (key == "io_threads") {
+    config.io_threads_ =
+        static_cast<std::uint32_t>(
+            parse_unsigned(
+                value,
+                key,
+                line_number,
+                1,
+                64
+            )
+        );
+        
         } else if (
             key == "http_max_header_bytes"
         ) {
@@ -254,6 +266,11 @@ ServerConfig::log_file() const noexcept {
 }
 
 std::uint32_t
+ServerConfig::io_threads() const noexcept {
+    return io_threads_;
+}
+
+std::uint32_t
 ServerConfig::http_max_header_bytes()
     const noexcept {
     return http_max_header_bytes_;
@@ -282,5 +299,7 @@ ServerConfig::http_idle_timeout_seconds()
     const noexcept {
     return http_idle_timeout_seconds_;
 }
+
+
 
 }  // namespace secure

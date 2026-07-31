@@ -1,12 +1,14 @@
 #pragma once
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/signal_set.hpp>
-
 #include "secure/config/server_config.hpp"
 #include "secure/http/http_server.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+
+#include <atomic>
+
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/signal_set.hpp>
 
 namespace secure {
 
@@ -19,6 +21,8 @@ public:
     int run();
 
 private:
+    void run_io_context();
+
     void stop();
 
     ServerConfig config_;
@@ -32,6 +36,8 @@ private:
     boost::asio::signal_set signals_;
 
     HttpServer http_server_;
+
+    std::atomic_bool stopping_{false};
 };
 
 }  // namespace secure

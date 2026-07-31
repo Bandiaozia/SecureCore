@@ -7,6 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/ip/address.hpp>
 
 namespace secure {
@@ -24,6 +27,9 @@ HttpServer::HttpServer(
     : logger_(logger),
       router_(router),
       limits_(std::move(limits)),
+      strand_(
+          boost::asio::make_strand(io_context)
+      ),
       acceptor_(io_context) {
     const auto address =
         boost::asio::ip::make_address(
@@ -35,9 +41,7 @@ HttpServer::HttpServer(
         port
     );
 
-    acceptor_.open(
-        endpoint.protocol()
-    );
+    acceptor_.open(endpoint.protocol());
 
     acceptor_.set_option(
         tcp::acceptor::reuse_address(true)
@@ -73,19 +77,50 @@ HttpServer::HttpServer(
 }
 
 void HttpServer::start() {
-    logger_.info(
-        "HTTP server started."
-    );
+    boost::asio::dispatch(
+        strand_,
+        [this] {
+            if (stopped_) {
+                return;
+            }
 
-    do_accept();
+            logger_.info(
+                "HTTP server started."
+            );
+
+            do_accept();
+        }
+    );
 }
 
 void HttpServer::stop() {
+    boost::asio::dispatch(
+        strand_,
+        [this] {
+            do_stop();
+        }
+    );
+}
+
+void HttpServer::do_stop() {
+    if (stopped_) {
+        return;
+    }
+
+    stopped_ = true;
+
     boost::system::error_code error;
+
+    acceptor_.cancel(error);
+
+    error.clear();
 
     acceptor_.close(error);
 
-    if (error) {
+    if (
+        error &&
+        error != boost::asio::error::bad_descriptor
+    ) {
         logger_.error(
             "Failed to close HTTP acceptor: ",
             error.message()
@@ -100,40 +135,62 @@ void HttpServer::stop() {
 }
 
 void HttpServer::do_accept() {
+    if (
+        stopped_ ||
+        !acceptor_.is_open()
+    ) {
+        return;
+    }
+
     acceptor_.async_accept(
-        [this](
-            const boost::system::error_code& error,
-            tcp::socket socket
-        ) {
-            if (!error) {
-                auto session =
-                    std::make_shared<HttpSession>(
-                        std::move(socket),
-                        connection_manager_,
-                        logger_,
-                        router_,
-                        limits_
+        boost::asio::bind_executor(
+            strand_,
+            [this](
+                const boost::system::error_code& error,
+                tcp::socket socket
+            ) {
+                if (
+                    !error &&
+                    !stopped_
+                ) {
+                    auto session =
+                        std::make_shared<HttpSession>(
+                            std::move(socket),
+                            connection_manager_,
+                            logger_,
+                            router_,
+                            limits_
+                        );
+
+                    connection_manager_.start(
+                        session
                     );
 
-                connection_manager_.start(
-                    session
-                );
+                    logger_.info(
+                        "Active HTTP connections: ",
+                        connection_manager_.size()
+                    );
+                } else if (
+                    error &&
+                    error !=
+                        boost::asio::error::
+                            operation_aborted &&
+                    !stopped_
+                ) {
+                    logger_.error(
+                        "HTTP accept failed: ",
+                        error.message()
+                    );
+                }
 
-                logger_.info(
-                    "Active HTTP connections: ",
-                    connection_manager_.size()
-                );
-            } else if (acceptor_.is_open()) {
-                logger_.error(
-                    "HTTP accept failed: ",
-                    error.message()
-                );
+                if (
+                    !stopped_ &&
+                    acceptor_.is_open()
+                ) {
+                    do_accept();
+                }
             }
-
-            if (acceptor_.is_open()) {
-                do_accept();
-            }
-        }
+        )
     );
 }
 
