@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sqlite3.h>
 
@@ -535,6 +536,96 @@ LIMIT 1;
                 handle,
                 statement
             );
+        }
+    );
+}
+
+
+std::vector<User> UserRepository::list(
+    std::int64_t limit,
+    std::int64_t offset
+) {
+    if (
+        limit <= 0 ||
+        limit > 100
+    ) {
+        throw std::invalid_argument(
+            "User list limit must be "
+            "between 1 and 100"
+        );
+    }
+
+    if (offset < 0) {
+        throw std::invalid_argument(
+            "User list offset must not "
+            "be negative"
+        );
+    }
+
+    return database_.with_locked_handle(
+        [
+            limit,
+            offset
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+SELECT
+    id,
+    username,
+    email,
+    password_hash,
+    role,
+    enabled,
+    created_at,
+    updated_at
+FROM users
+ORDER BY id ASC
+LIMIT ?1
+OFFSET ?2;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                limit
+            );
+
+            statement.bind_int64(
+                2,
+                offset
+            );
+
+            std::vector<User> users;
+
+            while (true) {
+                const int result =
+                    statement.step();
+
+                if (result == SQLITE_ROW) {
+                    users.push_back(
+                        read_user(statement)
+                    );
+
+                    continue;
+                }
+
+                if (result == SQLITE_DONE) {
+                    break;
+                }
+
+                throw UserRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Listing users",
+                        result
+                    )
+                );
+            }
+
+            return users;
         }
     );
 }

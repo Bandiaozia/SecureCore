@@ -29,6 +29,7 @@ add_executable(
     src/http/http_session.cpp
     src/http/router.cpp
     src/http/routes.cpp
+    src/http/admin_routes.cpp
     src/http/json_utils.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
@@ -40,6 +41,7 @@ add_executable(
     src/security/password_hasher.cpp
     src/service/user_service.cpp
     src/service/auth_service.cpp
+    src/service/admin_service.cpp
 )
 
 target_include_directories(

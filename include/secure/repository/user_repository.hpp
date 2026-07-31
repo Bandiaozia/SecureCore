@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace secure {
 
@@ -53,12 +54,18 @@ public:
     );
 
     /*
-     * 登录时允许用户输入用户名或邮箱。
+     * 登录时允许输入用户名或邮箱。
      */
     [[nodiscard]]
     std::optional<User>
     find_by_login(
         std::string_view login
+    );
+
+    [[nodiscard]]
+    std::vector<User> list(
+        std::int64_t limit,
+        std::int64_t offset
     );
 
     [[nodiscard]]
