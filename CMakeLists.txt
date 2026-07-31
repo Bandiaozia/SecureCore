@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(SecureCore LANGUAGES CXX)
 find_package(Boost REQUIRED COMPONENTS system)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,6 +19,7 @@ add_executable(
     src/http/http_session.cpp
     src/http/router.cpp
     src/http/routes.cpp
+    src/http/json_utils.cpp
 )
 
 target_include_directories(
@@ -30,6 +32,7 @@ target_link_libraries(
     secure-server
     PRIVATE
         Boost::system
+        nlohmann_json::nlohmann_json
 )
 
 
