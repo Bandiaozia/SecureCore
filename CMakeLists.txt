@@ -35,8 +35,11 @@ add_executable(
     src/database/database.cpp
     src/database/migration.cpp
     src/repository/user_repository.cpp
+    src/repository/auth_session_repository.cpp
+    src/security/token_service.cpp
     src/security/password_hasher.cpp
     src/service/user_service.cpp
+    src/service/auth_service.cpp
 )
 
 target_include_directories(

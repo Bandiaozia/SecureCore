@@ -69,6 +69,55 @@ CREATE TABLE IF NOT EXISTS users (
         )
 );
 )SQL"
+            },
+            {
+                2,
+                "create_auth_sessions",
+                R"SQL(
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+
+    access_token_hash TEXT NOT NULL
+        UNIQUE,
+
+    refresh_token_hash TEXT NOT NULL
+        UNIQUE,
+
+    access_expires_at INTEGER NOT NULL,
+
+    refresh_expires_at INTEGER NOT NULL,
+
+    revoked INTEGER NOT NULL
+        DEFAULT 0
+        CHECK (
+            revoked IN (0, 1)
+        ),
+
+    created_at TEXT NOT NULL
+        DEFAULT (
+            strftime(
+                '%Y-%m-%dT%H:%M:%fZ',
+                'now'
+            )
+        ),
+
+    revoked_at TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS
+    idx_auth_sessions_user_id
+ON auth_sessions(user_id);
+
+CREATE INDEX IF NOT EXISTS
+    idx_auth_sessions_refresh_expires_at
+ON auth_sessions(refresh_expires_at);
+)SQL"
             }
         };
 
@@ -156,9 +205,6 @@ FROM schema_migrations;
                     "ROLLBACK;"
                 );
             } catch (...) {
-                /*
-                 * 保留最初的迁移异常。
-                 */
             }
 
             throw;

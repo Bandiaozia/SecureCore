@@ -8,8 +8,11 @@
 #include "secure/http/rate_limiter.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 #include "secure/security/password_hasher.hpp"
+#include "secure/security/token_service.hpp"
+#include "secure/service/auth_service.hpp"
 #include "secure/service/user_service.hpp"
 
 #include <atomic>
@@ -48,9 +51,16 @@ private:
 
     UserRepository user_repository_;
 
+    AuthSessionRepository
+        auth_session_repository_;
+
     PasswordHasher password_hasher_;
 
+    TokenService token_service_;
+
     UserService user_service_;
+
+    AuthService auth_service_;
 
     boost::asio::io_context io_context_;
 
