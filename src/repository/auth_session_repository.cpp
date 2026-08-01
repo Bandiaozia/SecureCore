@@ -92,6 +92,24 @@ public:
         );
     }
 
+    void bind_optional_int64(
+        int index,
+        const std::optional<std::int64_t>& value
+    ) {
+        if (value.has_value()) {
+            bind_int64(index, *value);
+            return;
+        }
+
+        check_result(
+            sqlite3_bind_null(
+                statement_,
+                index
+            ),
+            "Binding null value"
+        );
+    }
+
     void bind_text(
         int index,
         std::string_view value
@@ -123,6 +141,23 @@ public:
             statement_,
             index
         );
+    }
+
+    [[nodiscard]]
+    std::optional<std::int64_t>
+    column_optional_int64(
+        int index
+    ) const {
+        if (
+            sqlite3_column_type(
+                statement_,
+                index
+            ) == SQLITE_NULL
+        ) {
+            return std::nullopt;
+        }
+
+        return column_int64(index);
     }
 
     [[nodiscard]]
@@ -237,6 +272,12 @@ AuthSession read_session(
     session.revoked_at =
         statement.column_optional_text(8);
 
+    session.token_family_id =
+        statement.column_text(9);
+
+    session.parent_session_id =
+        statement.column_optional_int64(10);
+
     return session;
 }
 
@@ -282,7 +323,9 @@ SELECT
     refresh_expires_at,
     revoked,
     created_at,
-    revoked_at
+    revoked_at,
+    token_family_id,
+    parent_session_id
 FROM auth_sessions
 WHERE id = ?1
 LIMIT 1;
@@ -313,14 +356,18 @@ INSERT INTO auth_sessions (
     access_token_hash,
     refresh_token_hash,
     access_expires_at,
-    refresh_expires_at
+    refresh_expires_at,
+    token_family_id,
+    parent_session_id
 )
 VALUES (
     ?1,
     ?2,
     ?3,
     ?4,
-    ?5
+    ?5,
+    ?6,
+    ?7
 );
 )SQL"
     };
@@ -330,6 +377,21 @@ VALUES (
     statement.bind_text(3, input.refresh_token_hash);
     statement.bind_int64(4, input.access_expires_at);
     statement.bind_int64(5, input.refresh_expires_at);
+
+    const std::string family_id =
+        input.token_family_id.empty()
+            ? "legacy-single-" +
+                input.access_token_hash.substr(
+                    0,
+                    24
+                )
+            : input.token_family_id;
+
+    statement.bind_text(6, family_id);
+    statement.bind_optional_int64(
+        7,
+        input.parent_session_id
+    );
 
     const int result = statement.step();
 
@@ -393,7 +455,9 @@ SELECT
     refresh_expires_at,
     revoked,
     created_at,
-    revoked_at
+    revoked_at,
+    token_family_id,
+    parent_session_id
 FROM auth_sessions
 WHERE refresh_token_hash = ?1
 LIMIT 1;
@@ -522,6 +586,49 @@ WHERE
     return sqlite3_changes64(handle);
 }
 
+std::int64_t revoke_family_locked(
+    sqlite3* handle,
+    std::string_view token_family_id
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = COALESCE(
+        revoked_at,
+        strftime(
+            '%Y-%m-%dT%H:%M:%fZ',
+            'now'
+        )
+    )
+WHERE
+    token_family_id = ?1
+    AND revoked = 0;
+)SQL"
+    };
+
+    statement.bind_text(
+        1,
+        token_family_id
+    );
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw AuthSessionRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Revoking token family",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes64(handle);
+}
+
 }  // namespace
 
 AuthSessionRepository::
@@ -609,7 +716,9 @@ SELECT
     refresh_expires_at,
     revoked,
     created_at,
-    revoked_at
+    revoked_at,
+    token_family_id,
+    parent_session_id
 FROM auth_sessions
 WHERE access_token_hash = ?1
 LIMIT 1;
@@ -700,7 +809,9 @@ SELECT
     refresh_expires_at,
     revoked,
     created_at,
-    revoked_at
+    revoked_at,
+    token_family_id,
+    parent_session_id
 FROM auth_sessions
 WHERE
     user_id = ?1
@@ -785,7 +896,9 @@ SELECT
     refresh_expires_at,
     revoked,
     created_at,
-    revoked_at
+    revoked_at,
+    token_family_id,
+    parent_session_id
 FROM auth_sessions
 WHERE
     id = ?1
@@ -1062,6 +1175,28 @@ revoke_all_for_user(
     return revoke_all_for_user_locked(
         transaction.handle(),
         user_id
+    );
+}
+
+std::int64_t
+AuthSessionRepository::revoke_family(
+    DatabaseTransaction& transaction,
+    std::string_view token_family_id
+) {
+    if (token_family_id.empty()) {
+        return 0;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return revoke_family_locked(
+        transaction.handle(),
+        token_family_id
     );
 }
 

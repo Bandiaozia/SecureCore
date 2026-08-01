@@ -34,6 +34,18 @@ struct MetricsSnapshot final {
 
     std::uint64_t
         audit_events_failed_total{0};
+
+    std::uint64_t
+        auth_login_success_total{0};
+
+    std::uint64_t
+        auth_login_failure_total{0};
+
+    std::uint64_t
+        auth_login_throttled_total{0};
+
+    std::uint64_t
+        auth_refresh_reuse_total{0};
 };
 
 class MetricsRegistry final {
@@ -56,6 +68,14 @@ public:
     void audit_event_recorded() noexcept;
 
     void audit_event_failed() noexcept;
+
+    void auth_login_success() noexcept;
+
+    void auth_login_failure() noexcept;
+
+    void auth_login_throttled() noexcept;
+
+    void auth_refresh_reuse() noexcept;
 
     [[nodiscard]]
     MetricsSnapshot snapshot()
@@ -97,6 +117,18 @@ private:
 
     std::atomic_uint64_t
         audit_events_failed_total_{0};
+
+    std::atomic_uint64_t
+        auth_login_success_total_{0};
+
+    std::atomic_uint64_t
+        auth_login_failure_total_{0};
+
+    std::atomic_uint64_t
+        auth_login_throttled_total_{0};
+
+    std::atomic_uint64_t
+        auth_refresh_reuse_total_{0};
 };
 
 }  // namespace secure

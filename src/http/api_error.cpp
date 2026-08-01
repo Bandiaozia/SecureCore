@@ -104,6 +104,9 @@ std::string default_api_error_message(
     if (code == "invalid_credentials") {
         return "The login or password is invalid.";
     }
+    if (code == "login_throttled") {
+        return "Too many failed login attempts were made. Try again later.";
+    }
     if (code == "account_disabled") {
         return "The user account is disabled.";
     }
@@ -118,6 +121,9 @@ std::string default_api_error_message(
     }
     if (code == "refresh_token_expired") {
         return "The refresh token has expired.";
+    }
+    if (code == "refresh_token_reused") {
+        return "Refresh token reuse was detected and the session chain was revoked.";
     }
     if (code == "token_creation_failed") {
         return "Authentication tokens could not be created.";

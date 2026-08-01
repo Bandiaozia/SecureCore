@@ -14,6 +14,7 @@
 #include "secure/repository/user_repository.hpp"
 #include "secure/runtime/service_state.hpp"
 #include "secure/runtime/worker_pool.hpp"
+#include "secure/security/auth_abuse_protector.hpp"
 #include "secure/security/password_hasher.hpp"
 #include "secure/security/token_service.hpp"
 #include "secure/service/account_security_service.hpp"
@@ -83,6 +84,8 @@ private:
     AuditService audit_service_;
 
     UserService user_service_;
+
+    AuthAbuseProtector auth_abuse_protector_;
 
     AuthService auth_service_;
 

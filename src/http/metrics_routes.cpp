@@ -191,6 +191,26 @@ HttpResponse metrics_handler(
         << "# TYPE securecore_audit_events_failed_total counter\n"
         << "securecore_audit_events_failed_total "
         << metrics.audit_events_failed_total
+        << "\n"
+        << "# HELP securecore_auth_login_success_total Successful login attempts.\n"
+        << "# TYPE securecore_auth_login_success_total counter\n"
+        << "securecore_auth_login_success_total "
+        << metrics.auth_login_success_total
+        << "\n"
+        << "# HELP securecore_auth_login_failure_total Failed login attempts.\n"
+        << "# TYPE securecore_auth_login_failure_total counter\n"
+        << "securecore_auth_login_failure_total "
+        << metrics.auth_login_failure_total
+        << "\n"
+        << "# HELP securecore_auth_login_throttled_total Login attempts rejected by abuse protection.\n"
+        << "# TYPE securecore_auth_login_throttled_total counter\n"
+        << "securecore_auth_login_throttled_total "
+        << metrics.auth_login_throttled_total
+        << "\n"
+        << "# HELP securecore_auth_refresh_reuse_total Detected refresh-token reuse attempts.\n"
+        << "# TYPE securecore_auth_refresh_reuse_total counter\n"
+        << "securecore_auth_refresh_reuse_total "
+        << metrics.auth_refresh_reuse_total
         << "\n";
 
     HttpResponse response{

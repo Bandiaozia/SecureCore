@@ -30,6 +30,10 @@ public:
         const;
 
     [[nodiscard]]
+    std::string generate_token_family_id()
+        const;
+
+    [[nodiscard]]
     std::string hash_token(
         std::string_view token
     ) const;

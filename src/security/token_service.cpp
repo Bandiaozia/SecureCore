@@ -63,6 +63,25 @@ TokenService::generate_refresh_token()
     );
 }
 
+std::string TokenService::generate_token_family_id()
+    const {
+    std::array<
+        unsigned char,
+        token_random_bytes
+    > random_bytes{};
+
+    randombytes_buf(
+        random_bytes.data(),
+        random_bytes.size()
+    );
+
+    return std::string("sc_tf_") +
+        encode_hex(
+            random_bytes.data(),
+            random_bytes.size()
+        );
+}
+
 std::string TokenService::hash_token(
     std::string_view token
 ) const {

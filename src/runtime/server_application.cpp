@@ -238,12 +238,34 @@ ServerApplication::ServerApplication(
           user_repository_,
           password_hasher_
       ),
+      auth_abuse_protector_(
+          AuthAbuseConfig{
+              config_
+                  .auth_login_account_failure_limit(),
+              config_
+                  .auth_login_ip_failure_limit(),
+              std::chrono::seconds{
+                  config_
+                      .auth_login_failure_window_seconds()
+              },
+              std::chrono::seconds{
+                  config_
+                      .auth_login_lockout_seconds()
+              },
+              std::chrono::seconds{
+                  config_
+                      .auth_login_max_lockout_seconds()
+              }
+          }
+      ),
       auth_service_(
           database_,
           user_repository_,
           auth_session_repository_,
           password_hasher_,
-          token_service_
+          token_service_,
+          auth_abuse_protector_,
+          metrics_registry_
       ),
       admin_service_(
           database_,

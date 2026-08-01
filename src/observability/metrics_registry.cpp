@@ -140,6 +140,38 @@ void MetricsRegistry::audit_event_failed()
     );
 }
 
+void MetricsRegistry::auth_login_success()
+    noexcept {
+    auth_login_success_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
+void MetricsRegistry::auth_login_failure()
+    noexcept {
+    auth_login_failure_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
+void MetricsRegistry::auth_login_throttled()
+    noexcept {
+    auth_login_throttled_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
+void MetricsRegistry::auth_refresh_reuse()
+    noexcept {
+    auth_refresh_reuse_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
 MetricsSnapshot MetricsRegistry::snapshot()
     const noexcept {
     const auto uptime =
@@ -186,6 +218,18 @@ MetricsSnapshot MetricsRegistry::snapshot()
             std::memory_order_relaxed
         ),
         audit_events_failed_total_.load(
+            std::memory_order_relaxed
+        ),
+        auth_login_success_total_.load(
+            std::memory_order_relaxed
+        ),
+        auth_login_failure_total_.load(
+            std::memory_order_relaxed
+        ),
+        auth_login_throttled_total_.load(
+            std::memory_order_relaxed
+        ),
+        auth_refresh_reuse_total_.load(
             std::memory_order_relaxed
         )
     };

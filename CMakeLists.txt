@@ -107,6 +107,7 @@ set(
 
     src/security/token_service.cpp
     src/security/password_hasher.cpp
+    src/security/auth_abuse_protector.cpp
 
     src/service/user_service.cpp
     src/service/auth_service.cpp
@@ -485,6 +486,45 @@ if(BUILD_TESTING)
         securecore-audit-integration
         PROPERTIES
             TIMEOUT 40
+    )
+
+    add_executable(
+        securecore-auth-abuse-test
+        tests/auth_abuse_protector_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-auth-abuse-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-auth-abuse-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-auth-abuse-unit
+        COMMAND
+            securecore-auth-abuse-test
+    )
+
+    add_test(
+        NAME securecore-auth-abuse-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/auth_abuse_integration_test.py
+            $<TARGET_FILE:secure-server>
+    )
+
+    set_tests_properties(
+        securecore-auth-abuse-integration
+        PROPERTIES
+            TIMEOUT 60
     )
 
     add_test(

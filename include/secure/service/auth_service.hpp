@@ -10,20 +10,24 @@
 
 namespace secure {
 
+class AuthAbuseProtector;
 class AuthSessionRepository;
 class Database;
 class DatabaseTransaction;
+class MetricsRegistry;
 class PasswordHasher;
 class TokenService;
 class UserRepository;
 
 enum class AuthErrorCode {
     invalid_credentials,
+    login_throttled,
     account_disabled,
     invalid_access_token,
     access_token_expired,
     invalid_refresh_token,
     refresh_token_expired,
+    refresh_token_reused,
     token_creation_failed
 };
 
@@ -37,15 +41,22 @@ class AuthError final
 public:
     AuthError(
         AuthErrorCode code,
-        std::string message
+        std::string message,
+        std::uint32_t retry_after_seconds = 0
     );
 
     [[nodiscard]]
     AuthErrorCode code()
         const noexcept;
 
+    [[nodiscard]]
+    std::uint32_t retry_after_seconds()
+        const noexcept;
+
 private:
     AuthErrorCode code_;
+
+    std::uint32_t retry_after_seconds_{0};
 };
 
 struct AuthTokenPair final {
@@ -85,6 +96,8 @@ public:
             auth_session_repository,
         PasswordHasher& password_hasher,
         TokenService& token_service,
+        AuthAbuseProtector& auth_abuse_protector,
+        MetricsRegistry& metrics_registry,
         std::int64_t
             access_token_lifetime_seconds = 900,
         std::int64_t
@@ -95,7 +108,8 @@ public:
     [[nodiscard]]
     LoginResult login(
         std::string login,
-        std::string password
+        std::string password,
+        std::string client_ip = {}
     );
 
     [[nodiscard]]
@@ -134,7 +148,10 @@ private:
     AuthTokenPair issue_tokens(
         DatabaseTransaction& transaction,
         std::int64_t user_id,
-        std::int64_t current_time
+        std::int64_t current_time,
+        std::string token_family_id,
+        std::optional<std::int64_t>
+            parent_session_id
     );
 
     Database& database_;
@@ -147,6 +164,12 @@ private:
     PasswordHasher& password_hasher_;
 
     TokenService& token_service_;
+
+    AuthAbuseProtector& auth_abuse_protector_;
+
+    MetricsRegistry& metrics_registry_;
+
+    std::string dummy_password_hash_;
 
     std::int64_t
         access_token_lifetime_seconds_;
