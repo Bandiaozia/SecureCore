@@ -22,6 +22,9 @@ struct HttpLimits final {
     std::chrono::seconds idle_timeout{30};
 
     std::size_t max_connections{1024};
+
+    std::chrono::seconds
+        tls_handshake_timeout{10};
 };
 
 }  // namespace secure

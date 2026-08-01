@@ -43,6 +43,11 @@ find_package(
 )
 
 find_package(
+    OpenSSL
+    REQUIRED
+)
+
+find_package(
     SQLite3
     REQUIRED
 )
@@ -75,6 +80,7 @@ set(
 
     src/http/http_server.cpp
     src/http/http_session.cpp
+    src/http/tls_http_session.cpp
     src/http/router.cpp
     src/http/routes.cpp
     src/http/admin_routes.cpp
@@ -117,6 +123,8 @@ target_link_libraries(
         Boost::system
         nlohmann_json::nlohmann_json
         Threads::Threads
+        OpenSSL::SSL
+        OpenSSL::Crypto
         SQLite::SQLite3
         PkgConfig::SODIUM
 )
@@ -174,6 +182,12 @@ if(BUILD_TESTING)
         Python3
         REQUIRED
         COMPONENTS Interpreter
+    )
+
+    find_program(
+        OPENSSL_EXECUTABLE
+        NAMES openssl
+        REQUIRED
     )
 
     add_test(
@@ -264,6 +278,22 @@ if(BUILD_TESTING)
         NAME securecore-metrics-unit
         COMMAND
             securecore-metrics-test
+    )
+
+
+    add_test(
+        NAME securecore-https-smoke
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/https_smoke_test.py
+            $<TARGET_FILE:secure-server>
+            ${OPENSSL_EXECUTABLE}
+    )
+
+    set_tests_properties(
+        securecore-https-smoke
+        PROPERTIES
+            TIMEOUT 30
     )
 
 endif()

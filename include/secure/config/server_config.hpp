@@ -32,6 +32,18 @@ public:
     std::uint32_t
     worker_queue_capacity() const noexcept;
 
+    bool tls_enabled() const noexcept;
+
+    const std::string&
+    tls_certificate_file() const noexcept;
+
+    const std::string&
+    tls_private_key_file() const noexcept;
+
+    std::uint32_t
+    tls_handshake_timeout_seconds()
+        const noexcept;
+
     std::uint32_t
     http_max_connections() const noexcept;
 
@@ -77,6 +89,15 @@ private:
 
     std::uint32_t
         worker_queue_capacity_{256};
+
+    bool tls_enabled_{false};
+
+    std::string tls_certificate_file_;
+
+    std::string tls_private_key_file_;
+
+    std::uint32_t
+        tls_handshake_timeout_seconds_{10};
 
     std::uint32_t
         http_max_connections_{1024};
