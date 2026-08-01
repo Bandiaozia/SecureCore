@@ -10,10 +10,11 @@
 #include "secure/log/logger.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
+#include "secure/runtime/worker_pool.hpp"
 #include "secure/security/password_hasher.hpp"
 #include "secure/security/token_service.hpp"
-#include "secure/service/admin_service.hpp"
 #include "secure/service/account_security_service.hpp"
+#include "secure/service/admin_service.hpp"
 #include "secure/service/auth_service.hpp"
 #include "secure/service/user_service.hpp"
 
@@ -69,7 +70,13 @@ private:
     AccountSecurityService
         account_security_service_;
 
+    /*
+     * io_context 必须比 WorkerPool 更早构造、
+     * 更晚销毁。工作任务完成后会向它投递响应。
+     */
     boost::asio::io_context io_context_;
+
+    WorkerPool worker_pool_;
 
     boost::asio::signal_set signals_;
 

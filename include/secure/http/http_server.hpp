@@ -15,6 +15,7 @@ namespace secure {
 class Logger;
 class MiddlewarePipeline;
 class Router;
+class WorkerPool;
 
 class HttpServer final {
 public:
@@ -25,6 +26,7 @@ public:
         Logger& logger,
         Router& router,
         MiddlewarePipeline& middleware_pipeline,
+        WorkerPool& worker_pool,
         HttpLimits limits
     );
 
@@ -46,6 +48,8 @@ private:
     Router& router_;
 
     MiddlewarePipeline& middleware_pipeline_;
+
+    WorkerPool& worker_pool_;
 
     HttpLimits limits_;
 

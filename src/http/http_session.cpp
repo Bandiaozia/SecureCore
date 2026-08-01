@@ -5,14 +5,17 @@
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
+#include "secure/runtime/worker_pool.hpp"
 
 #include <exception>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/http.hpp>
 
@@ -29,6 +32,7 @@ HttpSession::HttpSession(
     Logger& logger,
     Router& router,
     MiddlewarePipeline& middleware_pipeline,
+    WorkerPool& worker_pool,
     const HttpLimits& limits
 )
     : stream_(std::move(socket)),
@@ -43,6 +47,7 @@ HttpSession::HttpSession(
       middleware_pipeline_(
           middleware_pipeline
       ),
+      worker_pool_(worker_pool),
       limits_(limits) {
     boost::system::error_code error;
 
@@ -219,54 +224,188 @@ void HttpSession::handle_read(
 }
 
 void HttpSession::handle_request() {
-    try {
-        const RequestContext context{
-            request_,
-            client_ip_
-        };
+    /*
+     * 当前请求在收到响应前不会启动下一次读取，
+     * 因此可以把 request_ 移交给后台任务。
+     */
+    auto request =
+        std::make_shared<HttpRequest>(
+            std::move(request_)
+        );
 
-        send_response(
-            middleware_pipeline_.execute(
-                context,
-                [this] {
-                    return router_.dispatch(
-                        request_
+    const std::string client_ip =
+        client_ip_;
+
+    auto self =
+        shared_from_this();
+
+    const WorkerPool::SubmitResult result =
+        worker_pool_.try_submit(
+            [
+                self,
+                request = std::move(request),
+                client_ip
+            ] {
+                HttpResponse response;
+
+                try {
+                    const RequestContext context{
+                        *request,
+                        client_ip
+                    };
+
+                    response =
+                        self->middleware_pipeline_
+                            .execute(
+                                context,
+                                [
+                                    self,
+                                    request
+                                ] {
+                                    return self->router_
+                                        .dispatch(
+                                            *request
+                                        );
+                                }
+                            );
+                } catch (
+                    const std::exception& error
+                ) {
+                    self->logger_.error(
+                        "Unhandled worker request "
+                        "exception: ",
+                        error.what()
                     );
+
+                    response =
+                        make_json_error(
+                            http::status::
+                                internal_server_error,
+                            "internal_server_error"
+                        );
+
+                    response.version(
+                        request->version()
+                    );
+
+                    response.set(
+                        http::field::server,
+                        "SecureCore"
+                    );
+
+                    response.keep_alive(false);
+
+                    response.prepare_payload();
+                } catch (...) {
+                    self->logger_.error(
+                        "Unknown worker request "
+                        "exception."
+                    );
+
+                    response =
+                        make_json_error(
+                            http::status::
+                                internal_server_error,
+                            "internal_server_error"
+                        );
+
+                    response.version(
+                        request->version()
+                    );
+
+                    response.set(
+                        http::field::server,
+                        "SecureCore"
+                    );
+
+                    response.keep_alive(false);
+
+                    response.prepare_payload();
                 }
-            )
+
+                boost::asio::post(
+                    self->strand_,
+                    [
+                        self,
+                        response =
+                            std::move(response)
+                    ]() mutable {
+                        self->complete_request(
+                            std::move(response)
+                        );
+                    }
+                );
+            }
         );
-    } catch (
-        const std::exception& error
+
+    if (
+        result ==
+        WorkerPool::SubmitResult::accepted
     ) {
-        logger_.error(
-            "Unhandled HTTP handler exception: ",
-            error.what()
-        );
-
-        HttpResponse response =
-            make_json_error(
-                http::status::
-                    internal_server_error,
-                "internal_server_error"
-            );
-
-        response.version(
-            request_.version()
-        );
-
-        response.set(
-            http::field::server,
-            "SecureCore"
-        );
-
-        response.keep_alive(false);
-
-        response.prepare_payload();
-
-        send_response(
-            std::move(response)
-        );
+        return;
     }
+
+    logger_.warning(
+        result ==
+            WorkerPool::SubmitResult::queue_full
+            ? "Worker queue is full. "
+              "Rejecting HTTP request."
+            : "Worker pool is stopping. "
+              "Rejecting HTTP request."
+    );
+
+    HttpResponse response =
+        make_json_error(
+            http::status::service_unavailable,
+            result ==
+                WorkerPool::SubmitResult::queue_full
+                ? "server_busy"
+                : "server_shutting_down"
+        );
+
+    response.version(
+        request->version()
+    );
+
+    response.set(
+        http::field::server,
+        "SecureCore"
+    );
+
+    response.set(
+        http::field::retry_after,
+        "1"
+    );
+
+    response.set(
+        http::field::cache_control,
+        "no-store"
+    );
+
+    response.set(
+        "X-Content-Type-Options",
+        "nosniff"
+    );
+
+    response.keep_alive(false);
+
+    response.prepare_payload();
+
+    send_response(
+        std::move(response)
+    );
+}
+
+void HttpSession::complete_request(
+    HttpResponse response
+) {
+    if (stopped_) {
+        return;
+    }
+
+    send_response(
+        std::move(response)
+    );
 }
 
 void HttpSession::send_response(

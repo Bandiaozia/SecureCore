@@ -63,6 +63,7 @@ set(
     SECURECORE_SOURCES
 
     src/runtime/server_application.cpp
+    src/runtime/worker_pool.cpp
 
     src/config/server_config.cpp
 
@@ -209,6 +210,31 @@ if(BUILD_TESTING)
         NAME securecore-router-unit
         COMMAND
             securecore-router-test
+    )
+
+    add_executable(
+        securecore-worker-pool-test
+        tests/worker_pool_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-worker-pool-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-worker-pool-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-worker-pool-unit
+        COMMAND
+            securecore-worker-pool-test
     )
 
 endif()

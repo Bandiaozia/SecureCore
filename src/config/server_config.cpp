@@ -193,6 +193,32 @@ ServerConfig ServerConfig::load_from_file(
                     )
                 );
         } else if (
+            key == "worker_threads"
+        ) {
+            config.worker_threads_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        64
+                    )
+                );
+        } else if (
+            key == "worker_queue_capacity"
+        ) {
+            config.worker_queue_capacity_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        1000000
+                    )
+                );
+        } else if (
             key == "http_max_connections"
         ) {
             config.http_max_connections_ =
@@ -347,6 +373,18 @@ std::uint32_t
 ServerConfig::io_threads()
     const noexcept {
     return io_threads_;
+}
+
+std::uint32_t
+ServerConfig::worker_threads()
+    const noexcept {
+    return worker_threads_;
+}
+
+std::uint32_t
+ServerConfig::worker_queue_capacity()
+    const noexcept {
+    return worker_queue_capacity_;
 }
 
 std::uint32_t
