@@ -1,27 +1,20 @@
 #pragma once
 
+#include "secure/database/database.hpp"
+
 #include <cstdint>
-#include <mutex>
 #include <string_view>
 
 struct sqlite3;
 
 namespace secure {
 
-class Database;
-
-enum class TransactionMode {
-    deferred,
-    immediate,
-    exclusive
-};
-
 /*
  * SQLite 事务的 RAII 封装。
  *
- * Transaction 在整个生命周期内独占 Database 的连接互斥锁，
- * 因此同一连接上的其他仓储操作不能插入事务中间。
- * 未显式 commit() 的活动事务会在析构时自动回滚。
+ * Transaction 在整个生命周期内独占连接池中的同一条连接。
+ * 未显式 commit() 的活动事务会在析构时自动回滚，之后连接
+ * 自动归还连接池。
  */
 class DatabaseTransaction final {
 public:
@@ -64,10 +57,6 @@ public:
         const Database& database
     ) const noexcept;
 
-    /*
-     * 仅供事务感知的仓储方法使用。
-     * 调用者不得缓存该指针，也不得在事务结束后继续使用。
-     */
     [[nodiscard]]
     sqlite3* handle() const;
 
@@ -85,7 +74,7 @@ private:
 
     Database* database_{nullptr};
 
-    std::unique_lock<std::mutex> lock_;
+    DatabaseConnectionLease connection_;
 
     bool active_{false};
 };

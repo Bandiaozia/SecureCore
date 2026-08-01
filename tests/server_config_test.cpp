@@ -20,6 +20,8 @@ constexpr std::array environment_variables{
     "SECURECORE_LISTEN_PORT",
     "SECURECORE_LOG_FILE",
     "SECURECORE_DATABASE_PATH",
+    "SECURECORE_DATABASE_POOL_SIZE",
+    "SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS",
     "SECURECORE_IO_THREADS",
     "SECURECORE_WORKER_THREADS",
     "SECURECORE_WORKER_QUEUE_CAPACITY",
@@ -136,6 +138,8 @@ std::string base_config(
         "database_path=" +
         (root / "data/server.db").string() +
         "\n"
+        "database_pool_size=2\n"
+        "database_acquire_timeout_ms=250\n"
         "io_threads=2\n"
         "worker_threads=3\n"
         "worker_queue_capacity=32\n"
@@ -189,6 +193,16 @@ int main() {
             "File worker thread count was not loaded"
         );
 
+        require(
+            config.database_pool_size() == 2,
+            "File database pool size was not loaded"
+        );
+
+        require(
+            config.database_acquire_timeout_ms() == 250,
+            "File database timeout was not loaded"
+        );
+
         config.validate_for_server();
 
         require(
@@ -218,6 +232,18 @@ int main() {
         );
 
         ::setenv(
+            "SECURECORE_DATABASE_POOL_SIZE",
+            "5",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS",
+            "750",
+            1
+        );
+
+        ::setenv(
             "SECURECORE_ENVIRONMENT",
             "test",
             1
@@ -236,6 +262,16 @@ int main() {
         require(
             config.worker_threads() == 7,
             "Environment did not override workers"
+        );
+
+        require(
+            config.database_pool_size() == 5,
+            "Environment did not override database pool size"
+        );
+
+        require(
+            config.database_acquire_timeout_ms() == 750,
+            "Environment did not override database timeout"
         );
 
         require(
@@ -263,6 +299,8 @@ int main() {
 
         ::unsetenv("SECURECORE_LISTEN_PORT");
         ::unsetenv("SECURECORE_WORKER_THREADS");
+        ::unsetenv("SECURECORE_DATABASE_POOL_SIZE");
+        ::unsetenv("SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS");
         ::unsetenv("SECURECORE_ENVIRONMENT");
 
         write_file(

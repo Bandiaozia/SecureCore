@@ -76,6 +76,9 @@ class SecureCoreHttpTests(unittest.TestCase):
                     f"listen_address={HOST}",
                     f"listen_port={cls.port}",
                     f"log_file={log_path}",
+                    f"database_path={temporary_path / 'securecore.db'}",
+                    "database_pool_size=2",
+                    "database_acquire_timeout_ms=500",
                     "io_threads=4",
                     "http_max_header_bytes=1024",
                     "http_max_body_bytes=256",
@@ -286,6 +289,30 @@ class SecureCoreHttpTests(unittest.TestCase):
             "/health?detail=true",
             200,
             {"status": "ok"},
+        )
+
+    def test_02a_database_pool_metrics(self) -> None:
+        status, body, headers = self.request(
+            "GET",
+            "/metrics",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertIn(
+            "text/plain",
+            headers.get("content-type", ""),
+        )
+        self.assertIn(
+            "securecore_database_pool_size 2",
+            body,
+        )
+        self.assertIn(
+            "securecore_database_connections_available",
+            body,
+        )
+        self.assertIn(
+            "securecore_database_acquire_timeouts_total",
+            body,
         )
 
     def test_03_missing_route(self) -> None:

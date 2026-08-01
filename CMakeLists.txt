@@ -333,6 +333,31 @@ if(BUILD_TESTING)
             securecore-transaction-test
     )
 
+    add_executable(
+        securecore-database-pool-test
+        tests/database_connection_pool_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-database-pool-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-database-pool-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-database-pool-unit
+        COMMAND
+            securecore-database-pool-test
+    )
+
     add_test(
         NAME securecore-https-smoke
         COMMAND

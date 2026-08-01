@@ -1,7 +1,5 @@
 #include "secure/database/transaction.hpp"
 
-#include "secure/database/database.hpp"
-
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -107,9 +105,11 @@ DatabaseTransaction::DatabaseTransaction(
     TransactionMode mode
 )
     : database_(&database),
-      lock_(database.mutex_) {
+      connection_(
+          database.acquire_connection()
+      ) {
     execute_sql(
-        database_->handle_,
+        connection_.handle(),
         begin_statement(mode),
         "Beginning database transaction"
     );
@@ -126,7 +126,9 @@ DatabaseTransaction::DatabaseTransaction(
     DatabaseTransaction&& other
 ) noexcept
     : database_(other.database_),
-      lock_(std::move(other.lock_)),
+      connection_(
+          std::move(other.connection_)
+      ),
       active_(other.active_) {
     other.database_ = nullptr;
     other.active_ = false;
@@ -143,7 +145,8 @@ DatabaseTransaction::operator=(
     finish_noexcept("ROLLBACK;");
 
     database_ = other.database_;
-    lock_ = std::move(other.lock_);
+    connection_ =
+        std::move(other.connection_);
     active_ = other.active_;
 
     other.database_ = nullptr;
@@ -162,8 +165,7 @@ void DatabaseTransaction::execute(
     );
 }
 
-std::int64_t
-DatabaseTransaction::query_int64(
+std::int64_t DatabaseTransaction::query_int64(
     std::string_view sql
 ) {
     if (sql.empty()) {
@@ -229,8 +231,7 @@ DatabaseTransaction::query_int64(
         ) == SQLITE_NULL
     ) {
         throw std::runtime_error(
-            "Transactional query returned "
-            "no integer value"
+            "Transactional query returned no integer value"
         );
     }
 
@@ -248,10 +249,7 @@ void DatabaseTransaction::commit() {
     );
 
     active_ = false;
-
-    if (lock_.owns_lock()) {
-        lock_.unlock();
-    }
+    connection_.release();
 }
 
 void DatabaseTransaction::rollback() {
@@ -262,10 +260,7 @@ void DatabaseTransaction::rollback() {
     );
 
     active_ = false;
-
-    if (lock_.owns_lock()) {
-        lock_.unlock();
-    }
+    connection_.release();
 }
 
 bool DatabaseTransaction::active()
@@ -284,14 +279,14 @@ sqlite3* DatabaseTransaction::handle()
     if (
         !active_ ||
         database_ == nullptr ||
-        !lock_.owns_lock()
+        !connection_
     ) {
         throw std::logic_error(
             "Database transaction is not active"
         );
     }
 
-    return database_->handle_;
+    return connection_.handle();
 }
 
 void DatabaseTransaction::finish_noexcept(
@@ -299,29 +294,23 @@ void DatabaseTransaction::finish_noexcept(
 ) noexcept {
     if (
         !active_ ||
-        database_ == nullptr
+        database_ == nullptr ||
+        !connection_
     ) {
         return;
     }
 
     try {
         execute_sql(
-            database_->handle_,
+            connection_.handle(),
             sql,
             "Finishing database transaction"
         );
     } catch (...) {
-        /*
-         * 析构和移动赋值不能抛出。
-         * SQLite 连接稍后仍会由 Database 析构关闭。
-         */
     }
 
     active_ = false;
-
-    if (lock_.owns_lock()) {
-        lock_.unlock();
-    }
+    connection_.release();
 }
 
 }  // namespace secure
