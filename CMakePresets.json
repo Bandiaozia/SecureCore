@@ -1,0 +1,77 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "asan-ubsan",
+      "displayName": "Debug + AddressSanitizer + UndefinedBehaviorSanitizer",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-asan-ubsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "SECURECORE_SANITIZER": "address-undefined",
+        "SECURECORE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Debug + ThreadSanitizer",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "SECURECORE_SANITIZER": "thread",
+        "SECURECORE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "fuzz-clang",
+      "displayName": "Clang libFuzzer + ASan + UBSan",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-fuzz",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "BUILD_TESTING": "OFF",
+        "SECURECORE_SANITIZER": "address-undefined",
+        "SECURECORE_BUILD_FUZZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    },
+    {
+      "name": "fuzz-clang",
+      "configurePreset": "fuzz-clang"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1:strict_string_checks=1:check_initialization_order=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    }
+  ]
+}

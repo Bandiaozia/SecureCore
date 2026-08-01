@@ -22,3 +22,6 @@
 # Python bytecode cache
 __pycache__/
 *.py[cod]
+
+# Sanitizer and fuzz build directories
+build-*/
