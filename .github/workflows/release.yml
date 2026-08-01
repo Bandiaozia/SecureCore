@@ -87,7 +87,35 @@ jobs:
           test -n "$first_archive"
           test -n "$second_archive"
 
-          cmp "$first_archive" "$second_archive"
+          if ! cmp --silent "$first_archive" "$second_archive"; then
+              echo "Release archives are not reproducible." >&2
+              sha256sum "$first_archive" "$second_archive" >&2
+
+              rm -rf reproducibility-diagnostics
+              mkdir -p \
+                  reproducibility-diagnostics/first \
+                  reproducibility-diagnostics/second
+
+              tar -xzf "$first_archive" \
+                  -C reproducibility-diagnostics/first
+              tar -xzf "$second_archive" \
+                  -C reproducibility-diagnostics/second
+
+              diff \
+                  --recursive \
+                  --unified \
+                  --no-dereference \
+                  reproducibility-diagnostics/first \
+                  reproducibility-diagnostics/second \
+                  > reproducibility-diagnostics/diff.txt \
+                  || true
+
+              sed -n '1,240p' \
+                  reproducibility-diagnostics/diff.txt \
+                  >&2
+
+              exit 1
+          fi
 
           mkdir -p dist
           cp "$first_archive" dist/
@@ -97,6 +125,18 @@ jobs:
               cd dist
               sha256sum --check "$(basename "$first_archive.sha256")"
           )
+
+      - name: Upload reproducibility failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: reproducibility-failure
+          path: |
+            reproducibility-diagnostics/
+            release-first/*.tar.gz
+            release-second/*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Generate build provenance
         if: github.event.repository.visibility == 'public'

@@ -115,12 +115,33 @@ jq -n \
     }' \
     > "$STAGING_DIRECTORY/BUILD_INFO.json"
 
+if ! command -v readelf >/dev/null 2>&1; then
+    echo "readelf is required to generate a deterministic dependency manifest." >&2
+    exit 1
+fi
+
+write_direct_dependencies() {
+    local label="$1"
+    local binary="$2"
+
+    printf '%s\n' "$label"
+
+    LC_ALL=C readelf --dynamic "$binary" \
+        | sed -n \
+            's/.*Shared library: \[\([^]]*\)\].*/  \1/p' \
+        | LC_ALL=C sort -u
+}
+
 {
-    echo "secure-server"
-    ldd "$BUILD_DIRECTORY/secure-server"
+    write_direct_dependencies \
+        "secure-server" \
+        "$BUILD_DIRECTORY/secure-server"
+
     echo
-    echo "secure-admin"
-    ldd "$BUILD_DIRECTORY/secure-admin"
+
+    write_direct_dependencies \
+        "secure-admin" \
+        "$BUILD_DIRECTORY/secure-admin"
 } > "$STAGING_DIRECTORY/DEPENDENCIES.txt"
 
 find "$STAGING_DIRECTORY" \
