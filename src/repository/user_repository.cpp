@@ -1,6 +1,7 @@
 #include "secure/repository/user_repository.hpp"
 
 #include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -276,6 +277,85 @@ LIMIT 1;
     );
 }
 
+
+bool set_password_hash_locked(
+    sqlite3* handle,
+    std::int64_t user_id,
+    std::string_view password_hash
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE users
+SET
+    password_hash = ?1,
+    updated_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE id = ?2;
+)SQL"
+    };
+
+    statement.bind_text(1, password_hash);
+    statement.bind_int64(2, user_id);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw UserRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Updating user password",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes(handle) > 0;
+}
+
+bool set_enabled_locked(
+    sqlite3* handle,
+    std::int64_t user_id,
+    bool enabled
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE users
+SET
+    enabled = ?1,
+    updated_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE id = ?2;
+)SQL"
+    };
+
+    statement.bind_int64(
+        1,
+        enabled ? 1 : 0
+    );
+
+    statement.bind_int64(2, user_id);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw UserRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Updating user status",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes(handle) > 0;
+}
+
 }  // namespace
 
 UserRepository::UserRepository(
@@ -418,6 +498,28 @@ UserRepository::find_by_id(
                 user_id
             );
         }
+    );
+}
+
+std::optional<User>
+UserRepository::find_by_id(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id
+) {
+    if (user_id <= 0) {
+        return std::nullopt;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "User repository transaction belongs "
+            "to another database"
+        );
+    }
+
+    return find_by_id_locked(
+        transaction.handle(),
+        user_id
     );
 }
 
@@ -661,53 +763,41 @@ bool UserRepository::set_password_hash(
     }
 
     return database_.with_locked_handle(
-        [
-            user_id,
-            password_hash
-        ](
+        [user_id, password_hash](
             sqlite3* handle
         ) {
-            Statement statement{
+            return set_password_hash_locked(
                 handle,
-                R"SQL(
-UPDATE users
-SET
-    password_hash = ?1,
-    updated_at = strftime(
-        '%Y-%m-%dT%H:%M:%fZ',
-        'now'
-    )
-WHERE id = ?2;
-)SQL"
-            };
-
-            statement.bind_text(
-                1,
+                user_id,
                 password_hash
             );
-
-            statement.bind_int64(
-                2,
-                user_id
-            );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                throw UserRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Updating user password",
-                        result
-                    )
-                );
-            }
-
-            return (
-                sqlite3_changes(handle) > 0
-            );
         }
+    );
+}
+
+bool UserRepository::set_password_hash(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id,
+    std::string_view password_hash
+) {
+    if (
+        user_id <= 0 ||
+        password_hash.empty()
+    ) {
+        return false;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "User repository transaction belongs "
+            "to another database"
+        );
+    }
+
+    return set_password_hash_locked(
+        transaction.handle(),
+        user_id,
+        password_hash
     );
 }
 
@@ -788,53 +878,38 @@ bool UserRepository::set_enabled(
     }
 
     return database_.with_locked_handle(
-        [
-            user_id,
-            enabled
-        ](
+        [user_id, enabled](
             sqlite3* handle
         ) {
-            Statement statement{
+            return set_enabled_locked(
                 handle,
-                R"SQL(
-UPDATE users
-SET
-    enabled = ?1,
-    updated_at = strftime(
-        '%Y-%m-%dT%H:%M:%fZ',
-        'now'
-    )
-WHERE id = ?2;
-)SQL"
-            };
-
-            statement.bind_int64(
-                1,
-                enabled ? 1 : 0
-            );
-
-            statement.bind_int64(
-                2,
-                user_id
-            );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                throw UserRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Updating user status",
-                        result
-                    )
-                );
-            }
-
-            return (
-                sqlite3_changes(handle) > 0
+                user_id,
+                enabled
             );
         }
+    );
+}
+
+bool UserRepository::set_enabled(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id,
+    bool enabled
+) {
+    if (user_id <= 0) {
+        return false;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "User repository transaction belongs "
+            "to another database"
+        );
+    }
+
+    return set_enabled_locked(
+        transaction.handle(),
+        user_id,
+        enabled
     );
 }
 

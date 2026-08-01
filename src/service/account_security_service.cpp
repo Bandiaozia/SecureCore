@@ -1,5 +1,7 @@
 #include "secure/service/account_security_service.hpp"
 
+#include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 #include "secure/security/password_hasher.hpp"
@@ -82,6 +84,7 @@ AccountSecurityError::code()
 
 AccountSecurityService::
 AccountSecurityService(
+    Database& database,
     AuthService& auth_service,
     UserRepository& user_repository,
     AuthSessionRepository&
@@ -89,7 +92,8 @@ AccountSecurityService(
     PasswordHasher& password_hasher,
     TokenService& token_service
 )
-    : auth_service_(auth_service),
+    : database_(database),
+      auth_service_(auth_service),
       user_repository_(user_repository),
       auth_session_repository_(
           auth_session_repository
@@ -248,8 +252,12 @@ AccountSecurityService::change_password(
             new_password
         );
 
+    auto transaction =
+        database_.begin_transaction();
+
     if (
         !user_repository_.set_password_hash(
+            transaction,
             current.user.id,
             new_password_hash
         )
@@ -262,9 +270,12 @@ AccountSecurityService::change_password(
     const std::int64_t revoked_sessions =
         auth_session_repository_
             .revoke_all_except_for_user(
+                transaction,
                 current.user.id,
                 current.session.id
             );
+
+    transaction.commit();
 
     return PasswordChangeResult{
         revoked_sessions

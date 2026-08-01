@@ -11,6 +11,7 @@
 namespace secure {
 
 class Database;
+class DatabaseTransaction;
 
 class UserRepositoryError
     : public std::runtime_error {
@@ -38,6 +39,12 @@ public:
 
     [[nodiscard]]
     std::optional<User> find_by_id(
+        std::int64_t user_id
+    );
+
+    [[nodiscard]]
+    std::optional<User> find_by_id(
+        DatabaseTransaction& transaction,
         std::int64_t user_id
     );
 
@@ -76,12 +83,24 @@ public:
         std::string_view password_hash
     );
 
+    bool set_password_hash(
+        DatabaseTransaction& transaction,
+        std::int64_t user_id,
+        std::string_view password_hash
+    );
+
     bool set_role(
         std::int64_t user_id,
         std::string_view role
     );
 
     bool set_enabled(
+        std::int64_t user_id,
+        bool enabled
+    );
+
+    bool set_enabled(
+        DatabaseTransaction& transaction,
         std::int64_t user_id,
         bool enabled
     );

@@ -1,5 +1,7 @@
 #include "secure/service/auth_service.hpp"
 
+#include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 #include "secure/model/auth_session.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
@@ -109,6 +111,7 @@ AuthErrorCode AuthError::code()
 }
 
 AuthService::AuthService(
+    Database& database,
     UserRepository& user_repository,
     AuthSessionRepository&
         auth_session_repository,
@@ -119,7 +122,8 @@ AuthService::AuthService(
     std::int64_t
         refresh_token_lifetime_seconds
 )
-    : user_repository_(
+    : database_(database),
+      user_repository_(
           user_repository
       ),
       auth_session_repository_(
@@ -223,8 +227,7 @@ LoginResult AuthService::refresh(
 ) {
     if (refresh_token.empty()) {
         throw AuthError(
-            AuthErrorCode::
-                invalid_refresh_token,
+            AuthErrorCode::invalid_refresh_token,
             "Refresh token is invalid"
         );
     }
@@ -234,96 +237,114 @@ LoginResult AuthService::refresh(
             refresh_token
         );
 
-    const std::optional<AuthSession>
-        session =
-            auth_session_repository_
-                .find_by_refresh_token_hash(
-                    token_hash
-                );
+    const std::int64_t now =
+        current_unix_time();
+
+    auto transaction =
+        database_.begin_transaction();
+
+    const std::optional<AuthSession> session =
+        auth_session_repository_
+            .find_by_refresh_token_hash(
+                transaction,
+                token_hash
+            );
 
     if (
         !session.has_value() ||
         session->revoked
     ) {
         throw AuthError(
-            AuthErrorCode::
-                invalid_refresh_token,
+            AuthErrorCode::invalid_refresh_token,
             "Refresh token is invalid"
         );
     }
 
-    const std::int64_t now =
-        current_unix_time();
+    if (session->refresh_expires_at <= now) {
+        static_cast<void>(
+            auth_session_repository_
+                .revoke_by_id(
+                    transaction,
+                    session->id
+                )
+        );
 
-    if (
-        session->refresh_expires_at <= now
-    ) {
-        auth_session_repository_
-            .revoke_by_id(
-                session->id
-            );
+        transaction.commit();
 
         throw AuthError(
-            AuthErrorCode::
-                refresh_token_expired,
+            AuthErrorCode::refresh_token_expired,
             "Refresh token has expired"
         );
     }
 
     const std::optional<User> user =
         user_repository_.find_by_id(
+            transaction,
             session->user_id
         );
 
     if (!user.has_value()) {
-        auth_session_repository_
-            .revoke_by_id(
-                session->id
-            );
+        static_cast<void>(
+            auth_session_repository_
+                .revoke_by_id(
+                    transaction,
+                    session->id
+                )
+        );
+
+        transaction.commit();
 
         throw AuthError(
-            AuthErrorCode::
-                invalid_refresh_token,
+            AuthErrorCode::invalid_refresh_token,
             "Refresh token is invalid"
         );
     }
 
     if (!user->enabled) {
-        auth_session_repository_
-            .revoke_by_id(
-                session->id
-            );
+        static_cast<void>(
+            auth_session_repository_
+                .revoke_by_id(
+                    transaction,
+                    session->id
+                )
+        );
+
+        transaction.commit();
 
         throw AuthError(
-            AuthErrorCode::
-                account_disabled,
+            AuthErrorCode::account_disabled,
             "User account is disabled"
         );
     }
 
     /*
-     * Refresh Token 轮换：
-     * 使用一次后，旧会话立即撤销。
+     * 旧会话撤销和新令牌创建必须处于同一事务。
+     * 新会话创建失败时，旧 Refresh Token 会自动恢复可用。
      */
     if (
         !auth_session_repository_
              .revoke_by_id(
+                 transaction,
                  session->id
              )
     ) {
         throw AuthError(
-            AuthErrorCode::
-                invalid_refresh_token,
+            AuthErrorCode::invalid_refresh_token,
             "Refresh token was already used"
         );
     }
 
+    AuthTokenPair tokens = issue_tokens(
+        transaction,
+        user->id,
+        now
+    );
+
+    transaction.commit();
+
     return LoginResult{
         *user,
-        issue_tokens(
-            user->id,
-            now
-        )
+        std::move(tokens)
     };
 }
 
@@ -514,6 +535,66 @@ AuthTokenPair AuthService::issue_tokens(
             token_creation_failed,
         "Could not create authentication "
         "tokens"
+    );
+}
+
+
+AuthTokenPair AuthService::issue_tokens(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id,
+    std::int64_t current_time
+) {
+    for (
+        int attempt = 0;
+        attempt < 3;
+        ++attempt
+    ) {
+        const GeneratedToken access =
+            token_service_
+                .generate_access_token();
+
+        const GeneratedToken refresh =
+            token_service_
+                .generate_refresh_token();
+
+        const std::int64_t access_expires_at =
+            current_time +
+            access_token_lifetime_seconds_;
+
+        const std::int64_t refresh_expires_at =
+            current_time +
+            refresh_token_lifetime_seconds_;
+
+        try {
+            static_cast<void>(
+                auth_session_repository_.create(
+                    transaction,
+                    CreateAuthSession{
+                        user_id,
+                        access.hash,
+                        refresh.hash,
+                        access_expires_at,
+                        refresh_expires_at
+                    }
+                )
+            );
+
+            return AuthTokenPair{
+                access.value,
+                refresh.value,
+                access_expires_at,
+                refresh_expires_at
+            };
+        } catch (
+            const DuplicateTokenError&
+        ) {
+            /* 重新生成随机令牌。 */
+        }
+    }
+
+    throw AuthError(
+        AuthErrorCode::token_creation_failed,
+        "Could not create authentication tokens"
     );
 }
 

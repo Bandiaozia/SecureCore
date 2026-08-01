@@ -11,6 +11,7 @@
 namespace secure {
 
 class Database;
+class DatabaseTransaction;
 
 class AuthSessionRepositoryError
     : public std::runtime_error {
@@ -37,6 +38,12 @@ public:
     );
 
     [[nodiscard]]
+    AuthSession create(
+        DatabaseTransaction& transaction,
+        const CreateAuthSession& input
+    );
+
+    [[nodiscard]]
     std::optional<AuthSession>
     find_by_access_token_hash(
         std::string_view token_hash
@@ -45,6 +52,13 @@ public:
     [[nodiscard]]
     std::optional<AuthSession>
     find_by_refresh_token_hash(
+        std::string_view token_hash
+    );
+
+    [[nodiscard]]
+    std::optional<AuthSession>
+    find_by_refresh_token_hash(
+        DatabaseTransaction& transaction,
         std::string_view token_hash
     );
 
@@ -73,7 +87,20 @@ public:
         std::int64_t excluded_session_id
     );
 
+    [[nodiscard]]
+    std::int64_t
+    revoke_all_except_for_user(
+        DatabaseTransaction& transaction,
+        std::int64_t user_id,
+        std::int64_t excluded_session_id
+    );
+
     bool revoke_by_id(
+        std::int64_t session_id
+    );
+
+    bool revoke_by_id(
+        DatabaseTransaction& transaction,
         std::int64_t session_id
     );
 
@@ -82,6 +109,12 @@ public:
     );
 
     std::int64_t revoke_all_for_user(
+        std::int64_t user_id
+    );
+
+    [[nodiscard]]
+    std::int64_t revoke_all_for_user(
+        DatabaseTransaction& transaction,
         std::int64_t user_id
     );
 

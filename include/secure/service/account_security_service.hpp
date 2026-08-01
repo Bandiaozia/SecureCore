@@ -12,6 +12,7 @@
 namespace secure {
 
 class AuthService;
+class Database;
 class AuthSessionRepository;
 class PasswordHasher;
 class TokenService;
@@ -58,6 +59,7 @@ struct PasswordChangeResult final {
 class AccountSecurityService final {
 public:
     AccountSecurityService(
+        Database& database,
         AuthService& auth_service,
         UserRepository& user_repository,
         AuthSessionRepository&
@@ -95,6 +97,8 @@ private:
     authenticate_current_session(
         std::string_view access_token
     );
+
+    Database& database_;
 
     AuthService& auth_service_;
 

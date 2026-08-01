@@ -11,6 +11,7 @@
 namespace secure {
 
 class AuthService;
+class Database;
 class AuthSessionRepository;
 class UserRepository;
 
@@ -61,6 +62,7 @@ struct UserStatusResult final {
 class AdminService final {
 public:
     AdminService(
+        Database& database,
         AuthService& auth_service,
         UserRepository& user_repository,
         AuthSessionRepository&
@@ -92,6 +94,8 @@ private:
     User require_admin(
         std::string_view access_token
     );
+
+    Database& database_;
 
     AuthService& auth_service_;
 
