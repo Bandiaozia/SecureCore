@@ -11,6 +11,7 @@
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/repository/audit_repository.hpp"
 #include "secure/repository/auth_session_repository.hpp"
+#include "secure/repository/rbac_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 #include "secure/runtime/service_state.hpp"
 #include "secure/runtime/worker_pool.hpp"
@@ -76,6 +77,8 @@ private:
         auth_session_repository_;
 
     AuditRepository audit_repository_;
+
+    RbacRepository rbac_repository_;
 
     PasswordHasher password_hasher_;
 

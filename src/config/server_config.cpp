@@ -72,6 +72,10 @@ constexpr std::array environment_mappings{
         "audit_retention_days"
     },
     EnvironmentMapping{
+        "SECURECORE_METRICS_REQUIRE_AUTH",
+        "metrics_require_auth"
+    },
+    EnvironmentMapping{
         "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
         "auth_login_account_failure_limit"
     },
@@ -613,6 +617,14 @@ void ServerConfig::apply_setting(
                 )
             );
     } else if (
+        key == "metrics_require_auth"
+    ) {
+        metrics_require_auth_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
         key == "auth_login_account_failure_limit"
     ) {
         auth_login_account_failure_limit_ =
@@ -976,6 +988,8 @@ std::string ServerConfig::redacted_summary()
         << shutdown_grace_period_ms_
         << ", audit_retention_days="
         << audit_retention_days_
+        << ", metrics_auth="
+        << (metrics_require_auth_ ? "required" : "public")
         << ", auth_login_limits="
         << auth_login_account_failure_limit_
         << "/account,"
@@ -1066,6 +1080,11 @@ std::uint32_t
 ServerConfig::audit_retention_days()
     const noexcept {
     return audit_retention_days_;
+}
+
+bool ServerConfig::metrics_require_auth()
+    const noexcept {
+    return metrics_require_auth_;
 }
 
 std::uint32_t

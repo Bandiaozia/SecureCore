@@ -55,6 +55,8 @@ public:
     std::uint32_t
     audit_retention_days() const noexcept;
 
+    bool metrics_require_auth() const noexcept;
+
     std::uint32_t
     auth_login_account_failure_limit()
         const noexcept;
@@ -156,6 +158,8 @@ private:
         shutdown_grace_period_ms_{10000};
 
     std::uint32_t audit_retention_days_{90};
+
+    bool metrics_require_auth_{false};
 
     std::uint32_t
         auth_login_account_failure_limit_{5};

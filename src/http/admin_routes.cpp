@@ -127,7 +127,7 @@ HttpResponse admin_error_response(
     case AdminErrorCode::forbidden:
         return make_json_error(
             http::status::forbidden,
-            "admin_permission_required"
+            "permission_required"
         );
 
     case AdminErrorCode::invalid_pagination:
@@ -150,6 +150,24 @@ HttpResponse admin_error_response(
         return make_json_error(
             http::status::conflict,
             "cannot_disable_self"
+        );
+
+    case AdminErrorCode::cannot_remove_last_super_admin:
+        return make_json_error(
+            http::status::conflict,
+            "cannot_remove_last_super_admin"
+        );
+
+    case AdminErrorCode::cannot_remove_base_role:
+        return make_json_error(
+            http::status::conflict,
+            "cannot_remove_base_role"
+        );
+
+    case AdminErrorCode::role_not_found:
+        return make_json_error(
+            http::status::not_found,
+            "role_not_found"
         );
     }
 

@@ -109,7 +109,7 @@ HttpResponse admin_error_response(
     if (error.code() == AdminErrorCode::forbidden) {
         return make_json_error(
             http::status::forbidden,
-            "admin_permission_required"
+            "permission_required"
         );
     }
 
@@ -321,8 +321,9 @@ HttpResponse list_audit_events_handler(
 
     try {
         const User administrator =
-            admin_service.authenticate_admin(
-                *access_token
+            admin_service.authenticate_with_permission(
+                *access_token,
+                "audit.read"
             );
 
         const AuditListResult result =

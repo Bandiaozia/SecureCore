@@ -134,6 +134,18 @@ std::string default_api_error_message(
     if (code == "admin_permission_required") {
         return "Administrator permission is required.";
     }
+    if (code == "permission_required") {
+        return "The authenticated user does not have the required permission.";
+    }
+    if (code == "role_not_found") {
+        return "The requested RBAC role was not found.";
+    }
+    if (code == "cannot_remove_last_super_admin") {
+        return "The last enabled super administrator cannot be removed or disabled.";
+    }
+    if (code == "cannot_remove_base_role") {
+        return "The base user role cannot be removed.";
+    }
     if (code == "user_not_found") {
         return "The user was not found.";
     }

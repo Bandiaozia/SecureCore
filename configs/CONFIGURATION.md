@@ -60,3 +60,13 @@ from the same source address.
 
 Environment-variable equivalents use the `SECURECORE_` prefix, for example
 `SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT`.
+
+## Protected metrics
+
+`metrics_require_auth=false` keeps `/metrics` compatible with a private
+Prometheus network. Set it to `true` in deployments where the metrics endpoint
+is reachable by untrusted clients. Protected metrics require a Bearer token
+whose current RBAC roles grant `metrics.read`.
+
+The environment-variable equivalent is
+`SECURECORE_METRICS_REQUIRE_AUTH=true`.
