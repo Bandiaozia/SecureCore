@@ -89,6 +89,7 @@ set(
     src/http/admin_routes.cpp
     src/http/account_routes.cpp
     src/http/audit_routes.cpp
+    src/http/rbac_routes.cpp
     src/http/metrics_routes.cpp
     src/http/api_error.cpp
     src/http/json_utils.cpp
@@ -104,6 +105,7 @@ set(
     src/repository/user_repository.cpp
     src/repository/auth_session_repository.cpp
     src/repository/audit_repository.cpp
+    src/repository/rbac_repository.cpp
 
     src/security/token_service.cpp
     src/security/password_hasher.cpp
@@ -523,6 +525,47 @@ if(BUILD_TESTING)
 
     set_tests_properties(
         securecore-auth-abuse-integration
+        PROPERTIES
+            TIMEOUT 60
+    )
+
+
+    add_executable(
+        securecore-rbac-test
+        tests/rbac_repository_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-rbac-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-rbac-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-rbac-unit
+        COMMAND
+            securecore-rbac-test
+    )
+
+    add_test(
+        NAME securecore-rbac-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/rbac_integration_test.py
+            $<TARGET_FILE:secure-server>
+            $<TARGET_FILE:secure-admin>
+    )
+
+    set_tests_properties(
+        securecore-rbac-integration
         PROPERTIES
             TIMEOUT 60
     )

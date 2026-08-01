@@ -86,3 +86,10 @@ rejects a login. Metadata contains only the stable reason and retry duration.
 `auth.refresh_reuse` is written when a previously revoked refresh token is
 submitted. SecureCore revokes the complete token family before responding.
 Passwords and token values are never included.
+
+## RBAC events
+
+Role management appends `rbac.role_assign` and `rbac.role_revoke` events. Local
+CLI operations use `admin.cli.assign-role`, `admin.cli.revoke-role`,
+`admin.cli.promote`, and `admin.cli.demote`. Metadata contains only the role
+name and whether the assignment changed; credentials and tokens are excluded.

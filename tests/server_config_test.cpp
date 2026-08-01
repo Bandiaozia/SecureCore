@@ -27,6 +27,7 @@ constexpr std::array environment_variables{
     "SECURECORE_WORKER_QUEUE_CAPACITY",
     "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
     "SECURECORE_AUDIT_RETENTION_DAYS",
+    "SECURECORE_METRICS_REQUIRE_AUTH",
     "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
     "SECURECORE_AUTH_LOGIN_IP_FAILURE_LIMIT",
     "SECURECORE_AUTH_LOGIN_FAILURE_WINDOW_SECONDS",
@@ -152,6 +153,7 @@ std::string base_config(
         "worker_queue_capacity=32\n"
         "shutdown_grace_period_ms=1500\n"
         "audit_retention_days=45\n"
+        "metrics_require_auth=true\n"
         "auth_login_account_failure_limit=4\n"
         "auth_login_ip_failure_limit=12\n"
         "auth_login_failure_window_seconds=90\n"
@@ -220,6 +222,11 @@ int main() {
         require(
             config.audit_retention_days() == 45,
             "File audit retention was not loaded"
+        );
+
+        require(
+            config.metrics_require_auth(),
+            "File metrics authentication setting was not loaded"
         );
 
         require(
@@ -305,6 +312,12 @@ int main() {
         );
 
         ::setenv(
+            "SECURECORE_METRICS_REQUIRE_AUTH",
+            "false",
+            1
+        );
+
+        ::setenv(
             "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
             "6",
             1
@@ -363,6 +376,11 @@ int main() {
         );
 
         require(
+            !config.metrics_require_auth(),
+            "Environment did not override metrics authentication"
+        );
+
+        require(
             config.auth_login_account_failure_limit() == 6,
             "Environment did not override account failure limit"
         );
@@ -396,6 +414,7 @@ int main() {
         ::unsetenv("SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS");
         ::unsetenv("SECURECORE_SHUTDOWN_GRACE_PERIOD_MS");
         ::unsetenv("SECURECORE_AUDIT_RETENTION_DAYS");
+        ::unsetenv("SECURECORE_METRICS_REQUIRE_AUTH");
         ::unsetenv("SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT");
         ::unsetenv("SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS");
         ::unsetenv("SECURECORE_ENVIRONMENT");

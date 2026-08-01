@@ -2,6 +2,7 @@
 
 namespace secure {
 
+class AdminService;
 class Database;
 class MetricsRegistry;
 class Router;
@@ -13,7 +14,9 @@ void register_metrics_routes(
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
     Database& database,
-    ServiceState& service_state
+    ServiceState& service_state,
+    AdminService& admin_service,
+    bool require_authentication
 );
 
 }  // namespace secure

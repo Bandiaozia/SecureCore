@@ -216,6 +216,107 @@ CREATE INDEX IF NOT EXISTS
     idx_auth_sessions_parent_session_id
 ON auth_sessions(parent_session_id);
 )SQL"
+            },
+            {
+                5,
+                "create_rbac",
+                R"SQL(
+CREATE TABLE IF NOT EXISTS roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    built_in INTEGER NOT NULL DEFAULT 1
+        CHECK (built_in IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    assigned_by_user_id INTEGER,
+    assigned_at TEXT NOT NULL DEFAULT (
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    ),
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id INTEGER NOT NULL,
+    permission_id INTEGER NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id
+ON user_roles(role_id, user_id);
+
+CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id
+ON role_permissions(permission_id, role_id);
+
+INSERT OR IGNORE INTO roles(name, description, built_in) VALUES
+    ('user', 'Base authenticated user role.', 1),
+    ('auditor', 'Can inspect security audit events.', 1),
+    ('support', 'Can inspect users and re-enable accounts.', 1),
+    ('security_admin', 'Can manage account security and inspect protected metrics.', 1),
+    ('super_admin', 'Has every built-in administrative permission.', 1);
+
+INSERT OR IGNORE INTO permissions(name, description) VALUES
+    ('users.read', 'Read user profiles and user lists.'),
+    ('users.enable', 'Enable disabled user accounts.'),
+    ('users.disable', 'Disable user accounts.'),
+    ('sessions.read', 'Read user authentication sessions.'),
+    ('sessions.revoke', 'Revoke user authentication sessions.'),
+    ('audit.read', 'Read security audit events.'),
+    ('metrics.read', 'Read protected runtime metrics.'),
+    ('roles.manage', 'Assign and revoke RBAC roles.');
+
+INSERT OR IGNORE INTO role_permissions(role_id, permission_id)
+SELECT r.id, p.id
+FROM roles AS r, permissions AS p
+WHERE
+    (r.name = 'auditor' AND p.name IN ('audit.read'))
+    OR
+    (r.name = 'support' AND p.name IN ('users.read', 'users.enable'))
+    OR
+    (r.name = 'security_admin' AND p.name IN (
+        'users.read',
+        'users.enable',
+        'users.disable',
+        'sessions.read',
+        'sessions.revoke',
+        'audit.read',
+        'metrics.read'
+    ))
+    OR
+    (r.name = 'super_admin');
+
+INSERT OR IGNORE INTO user_roles(user_id, role_id)
+SELECT u.id, r.id
+FROM users AS u
+JOIN roles AS r ON r.name = 'user';
+
+INSERT OR IGNORE INTO user_roles(user_id, role_id)
+SELECT u.id, r.id
+FROM users AS u
+JOIN roles AS r ON r.name = 'super_admin'
+WHERE u.role = 'admin';
+
+CREATE TRIGGER IF NOT EXISTS assign_default_user_role
+AFTER INSERT ON users
+BEGIN
+    INSERT OR IGNORE INTO user_roles(user_id, role_id)
+    SELECT NEW.id, id FROM roles WHERE name = 'user';
+END;
+)SQL"
             }
         };
 

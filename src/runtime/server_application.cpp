@@ -5,6 +5,7 @@
 #include "secure/http/account_routes.hpp"
 #include "secure/http/http_limits.hpp"
 #include "secure/http/metrics_routes.hpp"
+#include "secure/http/rbac_routes.hpp"
 #include "secure/http/routes.hpp"
 
 #include <array>
@@ -227,6 +228,7 @@ ServerApplication::ServerApplication(
       user_repository_(database_),
       auth_session_repository_(database_),
       audit_repository_(database_),
+      rbac_repository_(database_),
       password_hasher_(),
       token_service_(),
       audit_service_(
@@ -271,7 +273,8 @@ ServerApplication::ServerApplication(
           database_,
           auth_service_,
           user_repository_,
-          auth_session_repository_
+          auth_session_repository_,
+          rbac_repository_
       ),
       account_security_service_(
           database_,
@@ -386,6 +389,12 @@ ServerApplication::ServerApplication(
         audit_service_
     );
 
+    register_rbac_routes(
+        router_,
+        admin_service_,
+        audit_service_
+    );
+
     register_audit_routes(
         router_,
         admin_service_,
@@ -397,7 +406,9 @@ ServerApplication::ServerApplication(
         metrics_registry_,
         worker_pool_,
         database_,
-        service_state_
+        service_state_,
+        admin_service_,
+        config_.metrics_require_auth()
     );
 
     register_default_middlewares(

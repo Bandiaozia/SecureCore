@@ -1,15 +1,21 @@
 #include "secure/http/metrics_routes.hpp"
 
 #include "secure/database/database.hpp"
+#include "secure/http/api_error.hpp"
 #include "secure/http/http_types.hpp"
 #include "secure/http/router.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 #include "secure/runtime/service_state.hpp"
+#include "secure/service/admin_service.hpp"
+#include "secure/service/auth_service.hpp"
 
 #include <iomanip>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include <boost/beast/http.hpp>
 
@@ -19,13 +25,92 @@ namespace http = boost::beast::http;
 
 namespace {
 
+std::optional<std::string> metrics_bearer_token(
+    const HttpRequest& request
+) {
+    const auto iterator = request.find(
+        http::field::authorization
+    );
+    if (iterator == request.end()) {
+        return std::nullopt;
+    }
+    const auto value = iterator->value();
+    constexpr std::string_view prefix{"Bearer "};
+    if (
+        value.size() <= prefix.size() ||
+        value.substr(0, prefix.size()) != prefix
+    ) {
+        return std::nullopt;
+    }
+    return std::string(
+        value.data() + prefix.size(),
+        value.size() - prefix.size()
+    );
+}
+
+std::optional<HttpResponse> authorize_metrics(
+    AdminService& admin_service,
+    bool require_authentication,
+    const HttpRequest& request
+) {
+    if (!require_authentication) {
+        return std::nullopt;
+    }
+    const auto token = metrics_bearer_token(request);
+    if (!token.has_value()) {
+        HttpResponse response = make_json_error(
+            http::status::unauthorized,
+            "missing_access_token"
+        );
+        response.set(http::field::www_authenticate, "Bearer");
+        return response;
+    }
+    try {
+        static_cast<void>(
+            admin_service.authenticate_with_permission(
+                *token,
+                "metrics.read"
+            )
+        );
+        return std::nullopt;
+    } catch (const AuthError& error) {
+        http::status status = http::status::unauthorized;
+        if (error.code() == AuthErrorCode::account_disabled) {
+            status = http::status::forbidden;
+        }
+        HttpResponse response = make_json_error(
+            status,
+            auth_error_name(error.code())
+        );
+        if (status == http::status::unauthorized) {
+            response.set(http::field::www_authenticate, "Bearer");
+        }
+        return response;
+    } catch (const AdminError&) {
+        return make_json_error(
+            http::status::forbidden,
+            "permission_required"
+        );
+    }
+}
+
 HttpResponse metrics_handler(
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
     Database& database,
     ServiceState& service_state,
+    AdminService& admin_service,
+    bool require_authentication,
     const HttpRequest& request
 ) {
+    if (auto denied = authorize_metrics(
+            admin_service,
+            require_authentication,
+            request
+        ); denied.has_value()
+    ) {
+        return std::move(*denied);
+    }
     const MetricsSnapshot metrics =
         metrics_registry.snapshot();
 
@@ -236,7 +321,9 @@ void register_metrics_routes(
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
     Database& database,
-    ServiceState& service_state
+    ServiceState& service_state,
+    AdminService& admin_service,
+    bool require_authentication
 ) {
     router.get(
         "/metrics",
@@ -244,7 +331,9 @@ void register_metrics_routes(
             &metrics_registry,
             &worker_pool,
             &database,
-            &service_state
+            &service_state,
+            &admin_service,
+            require_authentication
         ](
             const HttpRequest& request
         ) {
@@ -253,6 +342,8 @@ void register_metrics_routes(
                 worker_pool,
                 database,
                 service_state,
+                admin_service,
+                require_authentication,
                 request
             );
         }

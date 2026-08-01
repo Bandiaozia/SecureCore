@@ -45,3 +45,15 @@ It does not reveal whether the submitted login identifier exists.
 `refresh_token_reused` uses HTTP `401`. The complete refresh-token family is
 revoked before this response is returned, so the client must perform a full
 login.
+
+## RBAC errors
+
+Administrative endpoints can return:
+
+- `403 permission_required` when the authenticated user lacks the exact RBAC
+  permission required by the endpoint.
+- `404 role_not_found` when a requested role does not exist.
+- `409 cannot_remove_last_super_admin` when an operation would remove or
+  disable the final enabled `super_admin`.
+- `409 cannot_remove_base_role` when attempting to revoke the mandatory
+  `user` role.
