@@ -1,5 +1,6 @@
 #include "secure/http/metrics_routes.hpp"
 
+#include "secure/database/database.hpp"
 #include "secure/http/http_types.hpp"
 #include "secure/http/router.hpp"
 #include "secure/observability/metrics_registry.hpp"
@@ -20,6 +21,7 @@ namespace {
 HttpResponse metrics_handler(
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
+    Database& database,
     const HttpRequest& request
 ) {
     const MetricsSnapshot metrics =
@@ -27,6 +29,9 @@ HttpResponse metrics_handler(
 
     const WorkerPoolSnapshot workers =
         worker_pool.snapshot();
+
+    const DatabasePoolSnapshot database_pool =
+        database.pool_snapshot();
 
     const double duration_seconds =
         static_cast<double>(
@@ -116,6 +121,36 @@ HttpResponse metrics_handler(
         << "# TYPE securecore_worker_rejected_tasks_total counter\n"
         << "securecore_worker_rejected_tasks_total "
         << workers.rejected_tasks
+        << "\n"
+        << "# HELP securecore_database_pool_size Database connection pool size.\n"
+        << "# TYPE securecore_database_pool_size gauge\n"
+        << "securecore_database_pool_size "
+        << database_pool.pool_size
+        << "\n"
+        << "# HELP securecore_database_connections_available Available database connections.\n"
+        << "# TYPE securecore_database_connections_available gauge\n"
+        << "securecore_database_connections_available "
+        << database_pool.available_connections
+        << "\n"
+        << "# HELP securecore_database_connections_active Leased database connections.\n"
+        << "# TYPE securecore_database_connections_active gauge\n"
+        << "securecore_database_connections_active "
+        << database_pool.active_connections
+        << "\n"
+        << "# HELP securecore_database_waiting_threads Threads waiting for a database connection.\n"
+        << "# TYPE securecore_database_waiting_threads gauge\n"
+        << "securecore_database_waiting_threads "
+        << database_pool.waiting_threads
+        << "\n"
+        << "# HELP securecore_database_acquisitions_total Database connection acquisitions.\n"
+        << "# TYPE securecore_database_acquisitions_total counter\n"
+        << "securecore_database_acquisitions_total "
+        << database_pool.acquisitions_total
+        << "\n"
+        << "# HELP securecore_database_acquire_timeouts_total Database connection acquisition timeouts.\n"
+        << "# TYPE securecore_database_acquire_timeouts_total counter\n"
+        << "securecore_database_acquire_timeouts_total "
+        << database_pool.timeouts_total
         << "\n";
 
     HttpResponse response{
@@ -139,19 +174,22 @@ HttpResponse metrics_handler(
 void register_metrics_routes(
     Router& router,
     MetricsRegistry& metrics_registry,
-    WorkerPool& worker_pool
+    WorkerPool& worker_pool,
+    Database& database
 ) {
     router.get(
         "/metrics",
         [
             &metrics_registry,
-            &worker_pool
+            &worker_pool,
+            &database
         ](
             const HttpRequest& request
         ) {
             return metrics_handler(
                 metrics_registry,
                 worker_pool,
+                database,
                 request
             );
         }

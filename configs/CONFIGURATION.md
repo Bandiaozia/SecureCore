@@ -18,3 +18,17 @@ The private key must not grant any permissions to group or other users; use
 
 The startup log prints a redacted configuration summary. Database, log,
 certificate, and private-key paths are intentionally omitted.
+
+
+## Database connection pool
+
+`database_pool_size` controls the number of independent SQLite connections.
+`database_acquire_timeout_ms` limits how long a worker waits for a free
+connection before the request fails. The same values can be overridden with
+`SECURECORE_DATABASE_POOL_SIZE` and
+`SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS`.
+
+File databases use WAL mode so separate pooled connections can read in
+parallel. SQLite still serializes write transactions. Plain `:memory:`
+databases are automatically restricted to one connection because each
+`:memory:` connection owns an isolated database.

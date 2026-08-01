@@ -44,6 +44,14 @@ constexpr std::array environment_mappings{
         "database_path"
     },
     EnvironmentMapping{
+        "SECURECORE_DATABASE_POOL_SIZE",
+        "database_pool_size"
+    },
+    EnvironmentMapping{
+        "SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS",
+        "database_acquire_timeout_ms"
+    },
+    EnvironmentMapping{
         "SECURECORE_IO_THREADS",
         "io_threads"
     },
@@ -491,6 +499,30 @@ void ServerConfig::apply_setting(
         log_file_ = value;
     } else if (key == "database_path") {
         database_path_ = value;
+    } else if (key == "database_pool_size") {
+        database_pool_size_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    64
+                )
+            );
+    } else if (
+        key == "database_acquire_timeout_ms"
+    ) {
+        database_acquire_timeout_ms_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    60000
+                )
+            );
     } else if (key == "io_threads") {
         io_threads_ =
             static_cast<std::uint32_t>(
@@ -802,6 +834,10 @@ std::string ServerConfig::redacted_summary()
         << ':' << listen_port_
         << ", tls="
         << (tls_enabled_ ? "enabled" : "disabled")
+        << ", database_pool_size="
+        << database_pool_size_
+        << ", database_acquire_timeout_ms="
+        << database_acquire_timeout_ms_
         << ", io_threads=" << io_threads_
         << ", worker_threads=" << worker_threads_
         << ", worker_queue_capacity="
@@ -843,6 +879,18 @@ const std::string&
 ServerConfig::database_path()
     const noexcept {
     return database_path_;
+}
+
+std::uint32_t
+ServerConfig::database_pool_size()
+    const noexcept {
+    return database_pool_size_;
+}
+
+std::uint32_t
+ServerConfig::database_acquire_timeout_ms()
+    const noexcept {
+    return database_acquire_timeout_ms_;
 }
 
 std::uint32_t

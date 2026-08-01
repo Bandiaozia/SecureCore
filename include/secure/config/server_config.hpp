@@ -34,6 +34,13 @@ public:
     database_path() const noexcept;
 
     std::uint32_t
+    database_pool_size() const noexcept;
+
+    std::uint32_t
+    database_acquire_timeout_ms()
+        const noexcept;
+
+    std::uint32_t
     io_threads() const noexcept;
 
     std::uint32_t
@@ -106,6 +113,11 @@ private:
     std::string database_path_{
         "data/securecore.db"
     };
+
+    std::uint32_t database_pool_size_{4};
+
+    std::uint32_t
+        database_acquire_timeout_ms_{5000};
 
     std::uint32_t io_threads_{4};
 

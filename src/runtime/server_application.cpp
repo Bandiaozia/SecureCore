@@ -215,7 +215,12 @@ ServerApplication::ServerApplication(
           }
       ),
       database_(
-          config_.database_path()
+          config_.database_path(),
+          config_.database_pool_size(),
+          std::chrono::milliseconds{
+              config_
+                  .database_acquire_timeout_ms()
+          }
       ),
       migration_runner_(database_),
       user_repository_(database_),
@@ -326,7 +331,8 @@ ServerApplication::ServerApplication(
     register_metrics_routes(
         router_,
         metrics_registry_,
-        worker_pool_
+        worker_pool_,
+        database_
     );
 
     register_default_middlewares(
@@ -401,6 +407,14 @@ int ServerApplication::run() {
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
+    );
+
+    logger_.info(
+        "Database pool: ",
+        database_.pool_size(),
+        " connections, acquire timeout ",
+        database_.acquire_timeout().count(),
+        " ms."
     );
 
     logger_.info(
