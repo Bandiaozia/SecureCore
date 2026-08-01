@@ -49,6 +49,9 @@ public:
     std::uint32_t
     worker_queue_capacity() const noexcept;
 
+    std::uint32_t
+    shutdown_grace_period_ms() const noexcept;
+
     bool tls_enabled() const noexcept;
 
     const std::string&
@@ -125,6 +128,9 @@ private:
 
     std::uint32_t
         worker_queue_capacity_{256};
+
+    std::uint32_t
+        shutdown_grace_period_ms_{10000};
 
     bool tls_enabled_{false};
 

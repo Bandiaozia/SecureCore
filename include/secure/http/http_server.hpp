@@ -3,6 +3,7 @@
 #include "secure/http/http_limits.hpp"
 #include "secure/net/connection_manager.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -36,7 +37,22 @@ public:
 
     void start();
 
+    void begin_draining();
+
     void stop();
+
+    [[nodiscard]]
+    bool force_stop_and_wait(
+        std::chrono::milliseconds timeout
+    );
+
+    [[nodiscard]]
+    bool wait_until_idle(
+        std::chrono::milliseconds timeout
+    ) const;
+
+    [[nodiscard]]
+    std::size_t active_connections() const;
 
 private:
     void do_accept();
@@ -44,6 +60,10 @@ private:
     void reject_connection(
         boost::asio::ip::tcp::socket socket
     );
+
+    void close_acceptor();
+
+    void do_begin_draining();
 
     void do_stop();
 
@@ -71,6 +91,8 @@ private:
     > strand_;
 
     boost::asio::ip::tcp::acceptor acceptor_;
+
+    bool draining_{false};
 
     bool stopped_{false};
 };

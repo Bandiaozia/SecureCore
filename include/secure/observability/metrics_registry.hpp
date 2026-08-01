@@ -11,6 +11,8 @@ struct MetricsSnapshot final {
 
     std::uint64_t http_requests_total{0};
 
+    std::uint64_t http_requests_in_flight{0};
+
     std::uint64_t http_responses_2xx{0};
 
     std::uint64_t http_responses_3xx{0};
@@ -32,6 +34,10 @@ class MetricsRegistry final {
 public:
     MetricsRegistry() noexcept;
 
+    void request_started() noexcept;
+
+    void request_finished() noexcept;
+
     void record_http_response(
         unsigned int status_code,
         std::chrono::microseconds elapsed
@@ -51,6 +57,9 @@ private:
 
     std::atomic_uint64_t
         http_requests_total_{0};
+
+    std::atomic_uint64_t
+        http_requests_in_flight_{0};
 
     std::atomic_uint64_t
         http_responses_2xx_{0};

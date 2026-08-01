@@ -11,6 +11,7 @@
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
+#include "secure/runtime/service_state.hpp"
 #include "secure/runtime/worker_pool.hpp"
 #include "secure/security/password_hasher.hpp"
 #include "secure/security/token_service.hpp"
@@ -21,7 +22,10 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <thread>
 
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/ssl/context.hpp>
@@ -41,11 +45,17 @@ private:
 
     void stop();
 
+    void run_shutdown_sequence();
+
+    void join_shutdown_thread();
+
     ServerConfig config_;
 
     Logger logger_;
 
     MetricsRegistry metrics_registry_;
+
+    ServiceState service_state_;
 
     Router router_;
 
@@ -77,6 +87,10 @@ private:
 
     boost::asio::io_context io_context_;
 
+    boost::asio::executor_work_guard<
+        boost::asio::io_context::executor_type
+    > io_work_guard_;
+
     std::unique_ptr<
         boost::asio::ssl::context
     > tls_context_;
@@ -88,6 +102,10 @@ private:
     HttpServer http_server_;
 
     std::atomic_bool stopping_{false};
+
+    std::mutex shutdown_thread_mutex_;
+
+    std::thread shutdown_thread_;
 };
 
 }  // namespace secure

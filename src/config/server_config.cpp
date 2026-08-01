@@ -64,6 +64,10 @@ constexpr std::array environment_mappings{
         "worker_queue_capacity"
     },
     EnvironmentMapping{
+        "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
+        "shutdown_grace_period_ms"
+    },
+    EnvironmentMapping{
         "SECURECORE_TLS_ENABLED",
         "tls_enabled"
     },
@@ -558,6 +562,19 @@ void ServerConfig::apply_setting(
                     1000000
                 )
             );
+    } else if (
+        key == "shutdown_grace_period_ms"
+    ) {
+        shutdown_grace_period_ms_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    600000
+                )
+            );
     } else if (key == "tls_enabled") {
         tls_enabled_ = parse_boolean(
             value,
@@ -842,6 +859,8 @@ std::string ServerConfig::redacted_summary()
         << ", worker_threads=" << worker_threads_
         << ", worker_queue_capacity="
         << worker_queue_capacity_
+        << ", shutdown_grace_period_ms="
+        << shutdown_grace_period_ms_
         << ", max_connections="
         << http_max_connections_
         << ", rate_limit="
@@ -909,6 +928,12 @@ std::uint32_t
 ServerConfig::worker_queue_capacity()
     const noexcept {
     return worker_queue_capacity_;
+}
+
+std::uint32_t
+ServerConfig::shutdown_grace_period_ms()
+    const noexcept {
+    return shutdown_grace_period_ms_;
 }
 
 bool ServerConfig::tls_enabled()

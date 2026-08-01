@@ -45,9 +45,36 @@ bool ConnectionManager::start(
 void ConnectionManager::remove(
     const std::shared_ptr<Connection>& connection
 ) {
-    std::scoped_lock lock(mutex_);
+    bool became_empty = false;
 
-    connections_.erase(connection);
+    {
+        std::scoped_lock lock(mutex_);
+
+        connections_.erase(connection);
+        became_empty = connections_.empty();
+    }
+
+    if (became_empty) {
+        empty_condition_.notify_all();
+    }
+}
+
+void ConnectionManager::drain_all() {
+    std::vector<std::shared_ptr<Connection>>
+        connections;
+
+    {
+        std::scoped_lock lock(mutex_);
+
+        connections.assign(
+            connections_.begin(),
+            connections_.end()
+        );
+    }
+
+    for (const auto& connection : connections) {
+        connection->drain();
+    }
 }
 
 void ConnectionManager::stop_all() {
@@ -61,13 +88,25 @@ void ConnectionManager::stop_all() {
             connections_.begin(),
             connections_.end()
         );
-
-        connections_.clear();
     }
 
     for (const auto& connection : connections) {
         connection->stop();
     }
+}
+
+bool ConnectionManager::wait_until_empty(
+    std::chrono::milliseconds timeout
+) const {
+    std::unique_lock lock(mutex_);
+
+    return empty_condition_.wait_for(
+        lock,
+        timeout,
+        [this] {
+            return connections_.empty();
+        }
+    );
 }
 
 std::size_t ConnectionManager::size() const {

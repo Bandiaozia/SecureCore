@@ -31,6 +31,10 @@ int main() {
     metrics.connection_opened();
     metrics.connection_closed();
 
+    metrics.request_started();
+    metrics.request_started();
+    metrics.request_finished();
+
     metrics.record_http_response(
         200,
         std::chrono::microseconds{1250}
@@ -52,6 +56,11 @@ int main() {
     require(
         snapshot.http_requests_total == 3,
         "request total"
+    );
+
+    require(
+        snapshot.http_requests_in_flight == 1,
+        "in-flight requests"
     );
 
     require(

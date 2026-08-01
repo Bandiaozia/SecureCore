@@ -11,6 +11,32 @@ MetricsRegistry::MetricsRegistry() noexcept
       ) {
 }
 
+void MetricsRegistry::request_started() noexcept {
+    http_requests_in_flight_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
+void MetricsRegistry::request_finished() noexcept {
+    std::uint64_t current =
+        http_requests_in_flight_.load(
+            std::memory_order_relaxed
+        );
+
+    while (
+        current != 0 &&
+        !http_requests_in_flight_
+             .compare_exchange_weak(
+                 current,
+                 current - 1,
+                 std::memory_order_relaxed,
+                 std::memory_order_relaxed
+             )
+    ) {
+    }
+}
+
 void MetricsRegistry::record_http_response(
     unsigned int status_code,
     std::chrono::microseconds elapsed
@@ -113,6 +139,9 @@ MetricsSnapshot MetricsRegistry::snapshot()
             uptime.count()
         ),
         http_requests_total_.load(
+            std::memory_order_relaxed
+        ),
+        http_requests_in_flight_.load(
             std::memory_order_relaxed
         ),
         http_responses_2xx_.load(

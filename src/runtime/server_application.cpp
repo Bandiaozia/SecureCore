@@ -252,6 +252,11 @@ ServerApplication::ServerApplication(
           password_hasher_,
           token_service_
       ),
+      io_work_guard_(
+          boost::asio::make_work_guard(
+              io_context_
+          )
+      ),
       tls_context_(
           make_tls_context(config_)
       ),
@@ -314,6 +319,7 @@ ServerApplication::ServerApplication(
     register_routes(
         router_,
         database_,
+        service_state_,
         user_service_,
         auth_service_
     );
@@ -332,7 +338,8 @@ ServerApplication::ServerApplication(
         router_,
         metrics_registry_,
         worker_pool_,
-        database_
+        database_,
+        service_state_
     );
 
     register_default_middlewares(
@@ -354,7 +361,7 @@ ServerApplication::ServerApplication(
             logger_.info(
                 "Received signal ",
                 signal_number,
-                ", stopping server."
+                ", beginning graceful shutdown."
             );
 
             stop();
@@ -425,6 +432,13 @@ int ServerApplication::run() {
         '.'
     );
 
+    logger_.info(
+        "Graceful shutdown period: ",
+        config_.shutdown_grace_period_ms(),
+        " ms."
+    );
+
+    service_state_.mark_running();
     http_server_.start();
 
     std::vector<std::thread> workers;
@@ -452,6 +466,8 @@ int ServerApplication::run() {
             worker.join();
         }
     }
+
+    join_shutdown_thread();
 
     logger_.info(
         "SecureCore server stopped."
@@ -493,9 +509,102 @@ void ServerApplication::stop() {
         return;
     }
 
-    http_server_.stop();
+    static_cast<void>(
+        service_state_.begin_draining()
+    );
+
+    logger_.info(
+        "Server entered draining state. "
+        "Grace period: ",
+        config_.shutdown_grace_period_ms(),
+        " ms."
+    );
+
+    http_server_.begin_draining();
+
+    std::scoped_lock lock(
+        shutdown_thread_mutex_
+    );
+
+    shutdown_thread_ = std::thread(
+        [this] {
+            run_shutdown_sequence();
+        }
+    );
+}
+
+void ServerApplication::run_shutdown_sequence() {
+    const auto grace_period =
+        std::chrono::milliseconds{
+            config_.shutdown_grace_period_ms()
+        };
+
+    const bool drained =
+        http_server_.wait_until_idle(
+            grace_period
+        );
+
+    if (drained) {
+        logger_.info(
+            "All HTTP connections drained "
+            "within the grace period."
+        );
+    } else {
+        logger_.warning(
+            "Graceful shutdown period expired "
+            "with ",
+            http_server_.active_connections(),
+            " active connection(s). Forcing "
+            "connection shutdown."
+        );
+
+        const bool force_stop_completed =
+            http_server_.force_stop_and_wait(
+                std::chrono::seconds{2}
+            );
+
+        if (!force_stop_completed) {
+            logger_.error(
+                "Timed out waiting for forced "
+                "HTTP connection shutdown."
+            );
+        }
+    }
 
     worker_pool_.stop();
+    service_state_.mark_stopped();
+
+    boost::system::error_code ignored_error;
+    signals_.cancel(ignored_error);
+
+    /*
+     * Worker tasks can temporarily be the only remaining work in the
+     * process.  Their completion handlers are posted back to io_context_.
+     * Keep the executor alive until WorkerPool has fully drained and joined,
+     * then release the guard and stop the event loop.
+     */
+    io_work_guard_.reset();
+    io_context_.stop();
+}
+
+void ServerApplication::join_shutdown_thread() {
+    std::thread shutdown_thread;
+
+    {
+        std::scoped_lock lock(
+            shutdown_thread_mutex_
+        );
+
+        if (shutdown_thread_.joinable()) {
+            shutdown_thread = std::move(
+                shutdown_thread_
+            );
+        }
+    }
+
+    if (shutdown_thread.joinable()) {
+        shutdown_thread.join();
+    }
 }
 
 }  // namespace secure
