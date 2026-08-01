@@ -6,6 +6,7 @@
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
+#include "secure/net/trusted_proxy.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 
@@ -58,6 +59,7 @@ TlsHttpSession::TlsHttpSession(
     MiddlewarePipeline& middleware_pipeline,
     WorkerPool& worker_pool,
     MetricsRegistry& metrics_registry,
+    TrustedProxyResolver& trusted_proxy_resolver,
     const HttpLimits& limits
 )
     : stream_(
@@ -77,6 +79,7 @@ TlsHttpSession::TlsHttpSession(
       ),
       worker_pool_(worker_pool),
       metrics_registry_(metrics_registry),
+      trusted_proxy_resolver_(trusted_proxy_resolver),
       limits_(limits) {
     boost::system::error_code error;
 
@@ -86,9 +89,9 @@ TlsHttpSession::TlsHttpSession(
             .remote_endpoint(error);
 
     if (error) {
-        client_ip_ = "unknown";
+        peer_ip_ = "unknown";
     } else {
-        client_ip_ =
+        peer_ip_ =
             endpoint.address().to_string();
     }
 
@@ -140,7 +143,7 @@ void TlsHttpSession::do_start() {
 
     logger_.info(
         "TLS session started from ",
-        client_ip_,
+        peer_ip_,
         ". Waiting for handshake."
     );
 
@@ -199,13 +202,13 @@ void TlsHttpSession::handle_handshake(
         if (error == beast::error::timeout) {
             logger_.warning(
                 "TLS handshake timeout from ",
-                client_ip_,
+                peer_ip_,
                 '.'
             );
         } else {
             logger_.warning(
                 "TLS handshake failed from ",
-                client_ip_,
+                peer_ip_,
                 ": ",
                 error.message()
             );
@@ -218,7 +221,7 @@ void TlsHttpSession::handle_handshake(
 
     logger_.info(
         "TLS handshake completed from ",
-        client_ip_,
+        peer_ip_,
         '.'
     );
 
@@ -349,7 +352,7 @@ void TlsHttpSession::handle_read(
     if (error == beast::error::timeout) {
         logger_.warning(
             "HTTPS read timeout from ",
-            client_ip_,
+            peer_ip_,
             '.'
         );
 
@@ -378,8 +381,8 @@ void TlsHttpSession::handle_request() {
     const unsigned request_version =
         request->version();
 
-    const std::string client_ip =
-        client_ip_;
+    const std::string peer_ip =
+        peer_ip_;
 
     auto self =
         shared_from_this();
@@ -389,15 +392,45 @@ void TlsHttpSession::handle_request() {
             [
                 self,
                 request = std::move(request),
-                client_ip,
+                peer_ip,
                 request_id
             ] {
                 HttpResponse response;
 
                 try {
+                    ResolvedClient resolved{
+                        peer_ip,
+                        true,
+                        false
+                    };
+
+                    std::optional<ApiError>
+                        proxy_error;
+
+                    try {
+                        resolved =
+                            self->trusted_proxy_resolver_
+                                .resolve(
+                                    peer_ip,
+                                    *request,
+                                    true
+                                );
+                    } catch (
+                        const ProxyHeaderError& error
+                    ) {
+                        proxy_error = ApiError{
+                            error.code(),
+                            error.what(),
+                            {}
+                        };
+                    }
+
                     const RequestContext context{
                         *request,
-                        client_ip
+                        resolved.client_ip,
+                        peer_ip,
+                        resolved.secure_transport,
+                        resolved.used_forwarded_headers
                     };
 
                     response =
@@ -406,8 +439,17 @@ void TlsHttpSession::handle_request() {
                                 context,
                                 [
                                     self,
-                                    request
+                                    request,
+                                    proxy_error =
+                                        std::move(proxy_error)
                                 ] {
+                                    if (proxy_error.has_value()) {
+                                        throw ApiException(
+                                            http::status::bad_request,
+                                            *proxy_error
+                                        );
+                                    }
+
                                     return self->router_
                                         .dispatch(
                                             *request
@@ -755,7 +797,7 @@ void TlsHttpSession::handle_tls_shutdown(
     ) {
         logger_.warning(
             "TLS shutdown failed for ",
-            client_ip_,
+            peer_ip_,
             ": ",
             error.message()
         );
@@ -770,7 +812,7 @@ void TlsHttpSession::send_protocol_error(
 ) {
     logger_.warning(
         "Rejected HTTPS request from ",
-        client_ip_,
+        peer_ip_,
         ": ",
         error_code,
         '.'
@@ -826,7 +868,7 @@ void TlsHttpSession::handle_disconnect(
     ) {
         logger_.warning(
             "HTTPS connection from ",
-            client_ip_,
+            peer_ip_,
             " ended with error: ",
             error.message()
         );
@@ -840,7 +882,7 @@ void TlsHttpSession::handle_disconnect(
 
     logger_.info(
         "HTTPS client ",
-        client_ip_,
+        peer_ip_,
         " disconnected. Active connections: ",
         connection_manager_.size()
     );

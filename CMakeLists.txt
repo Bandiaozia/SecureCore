@@ -80,6 +80,7 @@ set(
     src/log/logger.cpp
 
     src/net/connection_manager.cpp
+    src/net/trusted_proxy.cpp
 
     src/http/http_server.cpp
     src/http/http_session.cpp
@@ -95,6 +96,7 @@ set(
     src/http/json_utils.cpp
     src/http/request_id.cpp
     src/http/request_validation.cpp
+    src/http/cors_policy.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
 
@@ -568,6 +570,45 @@ if(BUILD_TESTING)
         securecore-rbac-integration
         PROPERTIES
             TIMEOUT 60
+    )
+
+    add_executable(
+        securecore-proxy-security-test
+        tests/proxy_security_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-proxy-security-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-proxy-security-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-proxy-security-unit
+        COMMAND
+            securecore-proxy-security-test
+    )
+
+    add_test(
+        NAME securecore-proxy-security-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/proxy_security_integration_test.py
+            $<TARGET_FILE:secure-server>
+    )
+
+    set_tests_properties(
+        securecore-proxy-security-integration
+        PROPERTIES
+            TIMEOUT 40
     )
 
     add_test(

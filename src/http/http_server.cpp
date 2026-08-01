@@ -8,6 +8,7 @@
 #include "secure/http/router.hpp"
 #include "secure/http/tls_http_session.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/net/trusted_proxy.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 
@@ -38,6 +39,7 @@ HttpServer::HttpServer(
     MiddlewarePipeline& middleware_pipeline,
     WorkerPool& worker_pool,
     MetricsRegistry& metrics_registry,
+    TrustedProxyResolver& trusted_proxy_resolver,
     HttpLimits limits
 )
     : tls_context_(tls_context),
@@ -46,6 +48,7 @@ HttpServer::HttpServer(
       middleware_pipeline_(middleware_pipeline),
       worker_pool_(worker_pool),
       metrics_registry_(metrics_registry),
+      trusted_proxy_resolver_(trusted_proxy_resolver),
       limits_(std::move(limits)),
       connection_manager_(
           limits_.max_connections
@@ -416,6 +419,7 @@ void HttpServer::do_accept() {
                                     middleware_pipeline_,
                                     worker_pool_,
                                     metrics_registry_,
+                                    trusted_proxy_resolver_,
                                     limits_
                                 );
                         } else {
@@ -430,6 +434,7 @@ void HttpServer::do_accept() {
                                     middleware_pipeline_,
                                     worker_pool_,
                                     metrics_registry_,
+                                    trusted_proxy_resolver_,
                                     limits_
                                 );
                         }

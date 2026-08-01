@@ -19,6 +19,7 @@ class MetricsRegistry;
 class MiddlewarePipeline;
 class Router;
 class WorkerPool;
+class TrustedProxyResolver;
 
 class HttpServer final {
 public:
@@ -32,6 +33,7 @@ public:
         MiddlewarePipeline& middleware_pipeline,
         WorkerPool& worker_pool,
         MetricsRegistry& metrics_registry,
+        TrustedProxyResolver& trusted_proxy_resolver,
         HttpLimits limits
     );
 
@@ -81,6 +83,8 @@ private:
     WorkerPool& worker_pool_;
 
     MetricsRegistry& metrics_registry_;
+
+    TrustedProxyResolver& trusted_proxy_resolver_;
 
     HttpLimits limits_;
 

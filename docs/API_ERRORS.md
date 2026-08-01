@@ -57,3 +57,12 @@ Administrative endpoints can return:
   disable the final enabled `super_admin`.
 - `409 cannot_remove_base_role` when attempting to revoke the mandatory
   `user` role.
+
+## Reverse proxy and CORS errors
+
+| HTTP | Code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_forwarded_header` | A forwarding header from a trusted proxy is malformed, duplicated, obfuscated, or contains an invalid address/scheme. |
+| 400 | `forwarded_header_too_large` | The combined trusted forwarding headers exceed `proxy_forwarded_header_max_bytes`. |
+| 403 | `cors_origin_denied` | The request `Origin` is not in the configured exact allowlist. |
+| 403 | `cors_preflight_denied` | A CORS preflight requested a method or header SecureCore does not permit. |

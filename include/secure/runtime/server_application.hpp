@@ -3,11 +3,13 @@
 #include "secure/config/server_config.hpp"
 #include "secure/database/database.hpp"
 #include "secure/database/migration.hpp"
+#include "secure/http/cors_policy.hpp"
 #include "secure/http/http_server.hpp"
 #include "secure/http/middleware.hpp"
 #include "secure/http/rate_limiter.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/net/trusted_proxy.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/repository/audit_repository.hpp"
 #include "secure/repository/auth_session_repository.hpp"
@@ -64,6 +66,12 @@ private:
     Router router_;
 
     RateLimiter rate_limiter_;
+
+    CorsPolicy cors_policy_;
+
+    HstsPolicy hsts_policy_;
+
+    TrustedProxyResolver trusted_proxy_resolver_;
 
     MiddlewarePipeline middleware_pipeline_;
 

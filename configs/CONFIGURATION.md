@@ -70,3 +70,56 @@ whose current RBAC roles grant `metrics.read`.
 
 The environment-variable equivalent is
 `SECURECORE_METRICS_REQUIRE_AUTH=true`.
+
+
+## Trusted reverse proxies and client addresses
+
+SecureCore ignores `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, and
+`X-Forwarded-Proto` unless the TCP peer matches `trusted_proxy_cidrs`.
+Use `none` for direct deployments. A local reverse proxy commonly uses:
+
+```ini
+trusted_proxy_cidrs=127.0.0.1/32,::1/128
+proxy_forwarded_header_max_bytes=4096
+```
+
+The resolver walks the forwarding chain from right to left and removes only
+trusted proxy hops. The first untrusted address becomes the effective client
+address used by HTTP rate limiting, login-abuse protection, access logs, and
+security audit events. Configure the reverse proxy to overwrite or safely
+append forwarding headers; never trust an address range that contains normal
+clients.
+
+SecureCore supports HTTP forwarding headers, not the HAProxy binary PROXY
+protocol. Send ordinary HTTP/HTTPS from the reverse proxy to SecureCore.
+
+## CORS allowlist
+
+`cors_allowed_origins` is an exact, comma-separated origin allowlist. Origins
+must include `http://` or `https://` and must not include a path. Development
+may use `*`; production mode refuses the wildcard. Credentials cannot be
+combined with the wildcard.
+
+```ini
+cors_allowed_origins=https://app.example.com,https://admin.example.com
+cors_allow_credentials=false
+cors_max_age_seconds=600
+```
+
+Disallowed origins and invalid preflight methods or headers receive HTTP 403.
+Requests without an `Origin` header are unaffected.
+
+## HTTP Strict Transport Security
+
+HSTS is emitted only for requests known to be secure. This includes direct TLS
+and `proto=https` / `X-Forwarded-Proto=https` received from a trusted proxy.
+Untrusted clients cannot forge the secure-transport decision.
+
+```ini
+hsts_enabled=true
+hsts_max_age_seconds=31536000
+hsts_include_subdomains=true
+hsts_preload=false
+```
+
+Enable preload only after confirming every subdomain is permanently HTTPS.
