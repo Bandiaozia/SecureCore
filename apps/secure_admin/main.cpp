@@ -9,6 +9,7 @@
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/rbac_repository.hpp"
 #include "secure/repository/user_repository.hpp"
+#include "secure/version.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -95,6 +96,17 @@ void write_audit(
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    if (argc == 2 && std::string_view{argv[1]} == "--version") {
+        std::cout
+            << "secure-admin "
+            << secure::build::version
+            << " ("
+            << secure::build::git_commit
+            << ")\n";
+
+        return EXIT_SUCCESS;
+    }
+
     if (argc < 3 || argc > 5) {
         print_usage(argv[0]);
         return EXIT_FAILURE;

@@ -25,3 +25,10 @@ __pycache__/
 
 # Sanitizer and fuzz build directories
 build-*/
+
+# CI and release output
+/build-ci-*/
+/build-release/
+/release-first/
+/release-second/
+/dist/

@@ -1,0 +1,15 @@
+#pragma once
+
+#include <string_view>
+
+namespace secure::build {
+
+inline constexpr std::string_view version{
+    "@SECURECORE_VERSION_STRING@"
+};
+
+inline constexpr std::string_view git_commit{
+    "@SECURECORE_GIT_COMMIT_STRING@"
+};
+
+}  // namespace secure::build
