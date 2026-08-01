@@ -20,9 +20,11 @@
 #include "secure/service/user_service.hpp"
 
 #include <atomic>
+#include <memory>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/ssl/context.hpp>
 
 namespace secure {
 
@@ -73,11 +75,11 @@ private:
     AccountSecurityService
         account_security_service_;
 
-    /*
-     * io_context 必须比 WorkerPool 更早构造、
-     * 更晚销毁。工作任务完成后会向它投递响应。
-     */
     boost::asio::io_context io_context_;
+
+    std::unique_ptr<
+        boost::asio::ssl::context
+    > tls_context_;
 
     WorkerPool worker_pool_;
 

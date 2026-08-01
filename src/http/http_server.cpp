@@ -4,6 +4,7 @@
 #include "secure/http/http_types.hpp"
 #include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
+#include "secure/http/tls_http_session.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
@@ -27,6 +28,7 @@ HttpServer::HttpServer(
     boost::asio::io_context& io_context,
     const std::string& listen_address,
     std::uint16_t port,
+    boost::asio::ssl::context* tls_context,
     Logger& logger,
     Router& router,
     MiddlewarePipeline& middleware_pipeline,
@@ -34,7 +36,8 @@ HttpServer::HttpServer(
     MetricsRegistry& metrics_registry,
     HttpLimits limits
 )
-    : logger_(logger),
+    : tls_context_(tls_context),
+      logger_(logger),
       router_(router),
       middleware_pipeline_(middleware_pipeline),
       worker_pool_(worker_pool),
@@ -72,7 +75,8 @@ HttpServer::HttpServer(
     );
 
     logger_.info(
-        "HTTP server configured on ",
+        protocol_name(),
+        " server configured on ",
         listen_address,
         ':',
         port,
@@ -80,7 +84,9 @@ HttpServer::HttpServer(
     );
 
     logger_.info(
-        "Maximum HTTP connections: ",
+        "Maximum ",
+        protocol_name(),
+        " connections: ",
         limits_.max_connections,
         '.'
     );
@@ -96,6 +102,8 @@ HttpServer::HttpServer(
         limits_.write_timeout.count(),
         "s, idle_timeout=",
         limits_.idle_timeout.count(),
+        "s, tls_handshake_timeout=",
+        limits_.tls_handshake_timeout.count(),
         "s."
     );
 }
@@ -109,7 +117,8 @@ void HttpServer::start() {
             }
 
             logger_.info(
-                "HTTP server started."
+                protocol_name(),
+                " server started."
             );
 
             do_accept();
@@ -146,7 +155,9 @@ void HttpServer::do_stop() {
         error != boost::asio::error::bad_descriptor
     ) {
         logger_.error(
-            "Failed to close HTTP acceptor: ",
+            "Failed to close ",
+            protocol_name(),
+            " acceptor: ",
             error.message()
         );
     }
@@ -154,7 +165,9 @@ void HttpServer::do_stop() {
     connection_manager_.stop_all();
 
     logger_.info(
-        "All HTTP connections stopped."
+        "All ",
+        protocol_name(),
+        " connections stopped."
     );
 }
 
@@ -163,6 +176,23 @@ void HttpServer::reject_connection(
 ) {
     namespace beast = boost::beast;
     namespace http = beast::http;
+
+    /*
+     * HTTPS 客户端在 TLS 握手之前不能接收
+     * 普通 HTTP 503 响应，因此直接关闭连接。
+     */
+    if (tls_context_ != nullptr) {
+        boost::system::error_code ignored_error;
+
+        socket.shutdown(
+            tcp::socket::shutdown_both,
+            ignored_error
+        );
+
+        socket.close(ignored_error);
+
+        return;
+    }
 
     auto stream =
         std::make_shared<beast::tcp_stream>(
@@ -215,7 +245,8 @@ void HttpServer::reject_connection(
             ) {
                 static_cast<void>(response);
 
-                boost::system::error_code ignored_error;
+                boost::system::error_code
+                    ignored_error;
 
                 stream->socket().shutdown(
                     tcp::socket::shutdown_both,
@@ -253,7 +284,8 @@ void HttpServer::do_accept() {
                         connection_manager_.full()
                     ) {
                         logger_.warning(
-                            "HTTP connection limit reached: ",
+                            protocol_name(),
+                            " connection limit reached: ",
                             connection_manager_.capacity(),
                             ". Rejecting client."
                         );
@@ -262,17 +294,39 @@ void HttpServer::do_accept() {
                             std::move(socket)
                         );
                     } else {
-                        auto session =
-                            std::make_shared<HttpSession>(
-                                std::move(socket),
-                                connection_manager_,
-                                logger_,
-                                router_,
-                                middleware_pipeline_,
-                                worker_pool_,
-                                metrics_registry_,
-                                limits_
-                            );
+                        std::shared_ptr<Connection>
+                            session;
+
+                        if (tls_context_ != nullptr) {
+                            session =
+                                std::make_shared<
+                                    TlsHttpSession
+                                >(
+                                    std::move(socket),
+                                    *tls_context_,
+                                    connection_manager_,
+                                    logger_,
+                                    router_,
+                                    middleware_pipeline_,
+                                    worker_pool_,
+                                    metrics_registry_,
+                                    limits_
+                                );
+                        } else {
+                            session =
+                                std::make_shared<
+                                    HttpSession
+                                >(
+                                    std::move(socket),
+                                    connection_manager_,
+                                    logger_,
+                                    router_,
+                                    middleware_pipeline_,
+                                    worker_pool_,
+                                    metrics_registry_,
+                                    limits_
+                                );
+                        }
 
                         if (
                             connection_manager_.start(
@@ -280,14 +334,17 @@ void HttpServer::do_accept() {
                             )
                         ) {
                             logger_.info(
-                                "Active HTTP connections: ",
+                                "Active ",
+                                protocol_name(),
+                                " connections: ",
                                 connection_manager_.size()
                             );
                         } else {
                             session->stop();
 
                             logger_.warning(
-                                "HTTP connection could not "
+                                protocol_name(),
+                                " connection could not "
                                 "be registered."
                             );
                         }
@@ -300,7 +357,8 @@ void HttpServer::do_accept() {
                     !stopped_
                 ) {
                     logger_.error(
-                        "HTTP accept failed: ",
+                        protocol_name(),
+                        " accept failed: ",
                         error.message()
                     );
                 }
@@ -314,6 +372,13 @@ void HttpServer::do_accept() {
             }
         )
     );
+}
+
+const char* HttpServer::protocol_name()
+    const noexcept {
+    return tls_context_ == nullptr
+        ? "HTTP"
+        : "HTTPS";
 }
 
 }  // namespace secure

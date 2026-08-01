@@ -6,14 +6,202 @@
 #include "secure/http/metrics_routes.hpp"
 #include "secure/http/routes.hpp"
 
+#include <array>
 #include <chrono>
 #include <csignal>
 #include <exception>
+#include <filesystem>
+#include <memory>
+#include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include <boost/asio/ssl/context.hpp>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
 namespace secure {
+
+namespace {
+
+namespace ssl = boost::asio::ssl;
+
+std::string last_openssl_error() {
+    const unsigned long error_code =
+        ERR_get_error();
+
+    if (error_code == 0) {
+        return "unknown OpenSSL error";
+    }
+
+    std::array<char, 256> buffer{};
+
+    ERR_error_string_n(
+        error_code,
+        buffer.data(),
+        buffer.size()
+    );
+
+    return std::string(buffer.data());
+}
+
+void require_regular_file(
+    const std::string& path,
+    const char* description
+) {
+    std::error_code error;
+
+    const bool regular_file =
+        std::filesystem::is_regular_file(
+            path,
+            error
+        );
+
+    if (
+        error ||
+        !regular_file
+    ) {
+        throw std::runtime_error(
+            std::string(description) +
+            " does not exist or is not a "
+            "regular file: " +
+            path
+        );
+    }
+}
+
+std::unique_ptr<ssl::context>
+make_tls_context(
+    const ServerConfig& config
+) {
+    if (!config.tls_enabled()) {
+        return nullptr;
+    }
+
+    if (
+        config.tls_certificate_file().empty()
+    ) {
+        throw std::runtime_error(
+            "tls_certificate_file is required "
+            "when tls_enabled=true"
+        );
+    }
+
+    if (
+        config.tls_private_key_file().empty()
+    ) {
+        throw std::runtime_error(
+            "tls_private_key_file is required "
+            "when tls_enabled=true"
+        );
+    }
+
+    require_regular_file(
+        config.tls_certificate_file(),
+        "TLS certificate file"
+    );
+
+    require_regular_file(
+        config.tls_private_key_file(),
+        "TLS private key file"
+    );
+
+    auto context =
+        std::make_unique<ssl::context>(
+            ssl::context::tls_server
+        );
+
+    context->set_options(
+        ssl::context::default_workarounds |
+        ssl::context::no_sslv2 |
+        ssl::context::no_sslv3 |
+        ssl::context::no_tlsv1 |
+        ssl::context::no_tlsv1_1 |
+        ssl::context::no_compression
+    );
+
+    SSL_CTX* native_context =
+        context->native_handle();
+
+    if (
+        SSL_CTX_set_min_proto_version(
+            native_context,
+            TLS1_2_VERSION
+        ) != 1
+    ) {
+        throw std::runtime_error(
+            "Failed to set minimum TLS "
+            "version: " +
+            last_openssl_error()
+        );
+    }
+
+#ifdef SSL_OP_NO_RENEGOTIATION
+    SSL_CTX_set_options(
+        native_context,
+        SSL_OP_NO_RENEGOTIATION
+    );
+#endif
+
+#ifdef SSL_MODE_RELEASE_BUFFERS
+    SSL_CTX_set_mode(
+        native_context,
+        SSL_MODE_RELEASE_BUFFERS
+    );
+#endif
+
+    boost::system::error_code error;
+
+    context->use_certificate_chain_file(
+        config.tls_certificate_file(),
+        error
+    );
+
+    if (error) {
+        throw std::runtime_error(
+            "Failed to load TLS certificate "
+            "chain '" +
+            config.tls_certificate_file() +
+            "': " +
+            error.message()
+        );
+    }
+
+    error.clear();
+
+    context->use_private_key_file(
+        config.tls_private_key_file(),
+        ssl::context::pem,
+        error
+    );
+
+    if (error) {
+        throw std::runtime_error(
+            "Failed to load TLS private key '" +
+            config.tls_private_key_file() +
+            "': " +
+            error.message()
+        );
+    }
+
+    if (
+        SSL_CTX_check_private_key(
+            native_context
+        ) != 1
+    ) {
+        throw std::runtime_error(
+            "TLS private key does not match "
+            "the certificate: " +
+            last_openssl_error()
+        );
+    }
+
+    return context;
+}
+
+}  // namespace
 
 ServerApplication::ServerApplication(
     ServerConfig config
@@ -58,6 +246,9 @@ ServerApplication::ServerApplication(
           password_hasher_,
           token_service_
       ),
+      tls_context_(
+          make_tls_context(config_)
+      ),
       worker_pool_(
           config_.worker_threads(),
           config_.worker_queue_capacity()
@@ -71,6 +262,7 @@ ServerApplication::ServerApplication(
           io_context_,
           config_.listen_address(),
           config_.listen_port(),
+          tls_context_.get(),
           logger_,
           router_,
           middleware_pipeline_,
@@ -99,7 +291,12 @@ ServerApplication::ServerApplication(
               },
 
               config_
-                  .http_max_connections()
+                  .http_max_connections(),
+
+              std::chrono::seconds{
+                  config_
+                      .tls_handshake_timeout_seconds()
+              }
           }
       ) {
     migration_runner_.apply();
@@ -178,6 +375,20 @@ int ServerApplication::run() {
         config_.worker_queue_capacity(),
         '.'
     );
+
+    if (config_.tls_enabled()) {
+        logger_.info(
+            "TLS enabled. Minimum protocol "
+            "version: TLS 1.2. Certificate: ",
+            config_.tls_certificate_file(),
+            '.'
+        );
+    } else {
+        logger_.warning(
+            "TLS is disabled. Authentication "
+            "traffic is not encrypted."
+        );
+    }
 
     logger_.info(
         "HTTP rate limit: ",
@@ -271,10 +482,6 @@ void ServerApplication::stop() {
         return;
     }
 
-    /*
-     * 先停止接收连接，再停止接收新的后台任务。
-     * WorkerPool 会处理完已经进入队列的任务后退出。
-     */
     http_server_.stop();
 
     worker_pool_.stop();

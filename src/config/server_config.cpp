@@ -79,6 +79,38 @@ std::uint64_t parse_unsigned(
     return result;
 }
 
+bool parse_boolean(
+    const std::string& value,
+    std::string_view key,
+    std::size_t line_number
+) {
+    if (
+        value == "true" ||
+        value == "1" ||
+        value == "yes" ||
+        value == "on"
+    ) {
+        return true;
+    }
+
+    if (
+        value == "false" ||
+        value == "0" ||
+        value == "no" ||
+        value == "off"
+    ) {
+        return false;
+    }
+
+    throw std::runtime_error(
+        "Invalid " +
+        std::string(key) +
+        " at line " +
+        std::to_string(line_number) +
+        ": expected true or false"
+    );
+}
+
 }  // namespace
 
 ServerConfig ServerConfig::load_from_file(
@@ -216,6 +248,38 @@ ServerConfig ServerConfig::load_from_file(
                         line_number,
                         1,
                         1000000
+                    )
+                );
+        } else if (
+            key == "tls_enabled"
+        ) {
+            config.tls_enabled_ =
+                parse_boolean(
+                    value,
+                    key,
+                    line_number
+                );
+        } else if (
+            key == "tls_certificate_file"
+        ) {
+            config.tls_certificate_file_ = value;
+        } else if (
+            key == "tls_private_key_file"
+        ) {
+            config.tls_private_key_file_ = value;
+        } else if (
+            key ==
+            "tls_handshake_timeout_seconds"
+        ) {
+            config
+                .tls_handshake_timeout_seconds_ =
+                static_cast<std::uint32_t>(
+                    parse_unsigned(
+                        value,
+                        key,
+                        line_number,
+                        1,
+                        300
                     )
                 );
         } else if (
@@ -385,6 +449,29 @@ std::uint32_t
 ServerConfig::worker_queue_capacity()
     const noexcept {
     return worker_queue_capacity_;
+}
+
+bool ServerConfig::tls_enabled()
+    const noexcept {
+    return tls_enabled_;
+}
+
+const std::string&
+ServerConfig::tls_certificate_file()
+    const noexcept {
+    return tls_certificate_file_;
+}
+
+const std::string&
+ServerConfig::tls_private_key_file()
+    const noexcept {
+    return tls_private_key_file_;
+}
+
+std::uint32_t
+ServerConfig::tls_handshake_timeout_seconds()
+    const noexcept {
+    return tls_handshake_timeout_seconds_;
 }
 
 std::uint32_t

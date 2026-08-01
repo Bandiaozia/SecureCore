@@ -8,6 +8,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/context.hpp>
 #include <boost/asio/strand.hpp>
 
 namespace secure {
@@ -24,6 +25,7 @@ public:
         boost::asio::io_context& io_context,
         const std::string& listen_address,
         std::uint16_t port,
+        boost::asio::ssl::context* tls_context,
         Logger& logger,
         Router& router,
         MiddlewarePipeline& middleware_pipeline,
@@ -44,6 +46,11 @@ private:
     );
 
     void do_stop();
+
+    [[nodiscard]]
+    const char* protocol_name() const noexcept;
+
+    boost::asio::ssl::context* tls_context_;
 
     Logger& logger_;
 
