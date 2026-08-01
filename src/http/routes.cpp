@@ -1,18 +1,21 @@
 #include "secure/http/routes.hpp"
 
 #include "secure/database/database.hpp"
+#include "secure/http/api_error.hpp"
 #include "secure/http/http_types.hpp"
 #include "secure/http/json_utils.hpp"
+#include "secure/http/request_validation.hpp"
 #include "secure/http/router.hpp"
 #include "secure/model/user.hpp"
+#include "secure/runtime/service_state.hpp"
 #include "secure/service/auth_service.hpp"
 #include "secure/service/user_service.hpp"
-#include "secure/runtime/service_state.hpp"
 
-#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <boost/beast/http.hpp>
 
@@ -103,27 +106,22 @@ Json make_login_result_json(
 ) {
     return Json{
         {"token_type", "Bearer"},
-
         {
             "access_token",
             result.tokens.access_token
         },
-
         {
             "refresh_token",
             result.tokens.refresh_token
         },
-
         {
             "access_expires_at",
             result.tokens.access_expires_at
         },
-
         {
             "refresh_expires_at",
             result.tokens.refresh_expires_at
         },
-
         {
             "user",
             make_public_user_json(
@@ -146,8 +144,7 @@ extract_bearer_token(
         return std::nullopt;
     }
 
-    const auto value =
-        iterator->value();
+    const auto value = iterator->value();
 
     constexpr std::string_view prefix{
         "Bearer "
@@ -155,10 +152,7 @@ extract_bearer_token(
 
     if (
         value.size() <= prefix.size() ||
-        value.substr(
-            0,
-            prefix.size()
-        ) != prefix
+        value.substr(0, prefix.size()) != prefix
     ) {
         return std::nullopt;
     }
@@ -173,56 +167,36 @@ http::status auth_error_status(
     AuthErrorCode code
 ) {
     switch (code) {
-    case AuthErrorCode::
-        invalid_credentials:
-
-    case AuthErrorCode::
-        invalid_access_token:
-
-    case AuthErrorCode::
-        access_token_expired:
-
-    case AuthErrorCode::
-        invalid_refresh_token:
-
-    case AuthErrorCode::
-        refresh_token_expired:
+    case AuthErrorCode::invalid_credentials:
+    case AuthErrorCode::invalid_access_token:
+    case AuthErrorCode::access_token_expired:
+    case AuthErrorCode::invalid_refresh_token:
+    case AuthErrorCode::refresh_token_expired:
         return http::status::unauthorized;
 
-    case AuthErrorCode::
-        account_disabled:
+    case AuthErrorCode::account_disabled:
         return http::status::forbidden;
 
-    case AuthErrorCode::
-        token_creation_failed:
-        return http::status::
-            internal_server_error;
+    case AuthErrorCode::token_creation_failed:
+        return http::status::internal_server_error;
     }
 
-    return http::status::
-        internal_server_error;
+    return http::status::internal_server_error;
 }
 
 HttpResponse make_auth_error_response(
     const AuthError& error
 ) {
     const http::status status =
-        auth_error_status(
-            error.code()
-        );
+        auth_error_status(error.code());
 
     HttpResponse response =
         make_json_error(
             status,
-            auth_error_name(
-                error.code()
-            )
+            auth_error_name(error.code())
         );
 
-    if (
-        status ==
-        http::status::unauthorized
-    ) {
+    if (status == http::status::unauthorized) {
         response.set(
             http::field::www_authenticate,
             "Bearer"
@@ -247,104 +221,121 @@ HttpResponse make_missing_token_response() {
     return response;
 }
 
+HttpResponse registration_error_response(
+    const RegistrationError& error
+) {
+    if (
+        error.code() ==
+        RegistrationErrorCode::duplicate_user
+    ) {
+        return make_json_error(
+            http::status::conflict,
+            "duplicate_user"
+        );
+    }
+
+    std::string field;
+    std::string reason;
+
+    switch (error.code()) {
+    case RegistrationErrorCode::invalid_username:
+        field = "username";
+        reason =
+            "must contain 3 to 32 ASCII letters, "
+            "digits, '_' or '-'";
+        break;
+
+    case RegistrationErrorCode::invalid_email:
+        field = "email";
+        reason = "must be a valid email address";
+        break;
+
+    case RegistrationErrorCode::weak_password:
+        field = "password";
+        reason =
+            "must contain between 8 and 128 bytes";
+        break;
+
+    case RegistrationErrorCode::duplicate_user:
+        break;
+    }
+
+    return make_validation_error(
+        {
+            ApiErrorDetail{
+                std::move(field),
+                std::move(reason)
+            }
+        }
+    );
+}
+
 HttpResponse register_handler(
     UserService& user_service,
     const HttpRequest& request
 ) {
-    if (!has_json_content_type(request)) {
-        return make_json_error(
-            http::status::
-                unsupported_media_type,
-            "unsupported_media_type"
-        );
-    }
+    const Json body =
+        parse_json_object(request);
 
-    if (request.body().empty()) {
-        return make_json_error(
-            http::status::bad_request,
-            "empty_body"
-        );
-    }
+    JsonObjectValidator validator(body);
 
-    Json body;
+    auto username = validator.required_string(
+        "username",
+        1,
+        254
+    );
 
-    try {
-        body = Json::parse(
-            request.body()
-        );
-    } catch (
-        const Json::parse_error&
+    auto email = validator.required_string(
+        "email",
+        1,
+        254
+    );
+
+    auto password = validator.required_string(
+        "password",
+        1,
+        128
+    );
+
+    if (
+        username.has_value() &&
+        !valid_username_input(*username)
     ) {
-        return make_json_error(
-            http::status::bad_request,
-            "invalid_json"
+        validator.add_error(
+            "username",
+            "must contain 3 to 32 ASCII letters, "
+            "digits, '_' or '-'"
         );
     }
 
-    if (!body.is_object()) {
-        return make_json_error(
-            http::status::bad_request,
-            "json_object_required"
+    if (
+        email.has_value() &&
+        !valid_email_input(*email)
+    ) {
+        validator.add_error(
+            "email",
+            "must be a valid email address"
         );
     }
 
-    const auto username =
-        body.find("username");
-
-    const auto email =
-        body.find("email");
-
-    const auto password =
-        body.find("password");
-
-    if (username == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "username_required"
+    if (
+        password.has_value() &&
+        !valid_password_input(*password)
+    ) {
+        validator.add_error(
+            "password",
+            "must contain between 8 and 128 bytes"
         );
     }
 
-    if (!username->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "username_must_be_string"
-        );
-    }
-
-    if (email == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "email_required"
-        );
-    }
-
-    if (!email->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "email_must_be_string"
-        );
-    }
-
-    if (password == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "password_required"
-        );
-    }
-
-    if (!password->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "password_must_be_string"
-        );
-    }
+    validator.throw_if_invalid();
 
     try {
         const User user =
             user_service.register_user(
-                username->get<std::string>(),
-                email->get<std::string>(),
-                password->get<std::string>()
+                std::move(*username),
+                std::move(*email),
+                std::move(*password)
             );
 
         HttpResponse response =
@@ -353,9 +344,7 @@ HttpResponse register_handler(
                 Json{
                     {
                         "user",
-                        make_public_user_json(
-                            user
-                        )
+                        make_public_user_json(user)
                     }
                 }
             );
@@ -367,23 +356,8 @@ HttpResponse register_handler(
         );
 
         return response;
-    } catch (
-        const RegistrationError& error
-    ) {
-        const http::status status =
-            error.code() ==
-                RegistrationErrorCode::
-                    duplicate_user
-                ? http::status::conflict
-                : http::status::
-                    bad_request;
-
-        return make_json_error(
-            status,
-            registration_error_name(
-                error.code()
-            )
-        );
+    } catch (const RegistrationError& error) {
+        return registration_error_response(error);
     }
 }
 
@@ -391,96 +365,38 @@ HttpResponse login_handler(
     AuthService& auth_service,
     const HttpRequest& request
 ) {
-    if (!has_json_content_type(request)) {
-        return make_json_error(
-            http::status::
-                unsupported_media_type,
-            "unsupported_media_type"
-        );
-    }
+    const Json body =
+        parse_json_object(request);
 
-    if (request.body().empty()) {
-        return make_json_error(
-            http::status::bad_request,
-            "empty_body"
-        );
-    }
+    JsonObjectValidator validator(body);
 
-    Json body;
+    auto login = validator.required_string(
+        "login",
+        1,
+        254
+    );
 
-    try {
-        body = Json::parse(
-            request.body()
-        );
-    } catch (
-        const Json::parse_error&
-    ) {
-        return make_json_error(
-            http::status::bad_request,
-            "invalid_json"
-        );
-    }
+    auto password = validator.required_string(
+        "password",
+        1,
+        128
+    );
 
-    if (!body.is_object()) {
-        return make_json_error(
-            http::status::bad_request,
-            "json_object_required"
-        );
-    }
-
-    const auto login =
-        body.find("login");
-
-    const auto password =
-        body.find("password");
-
-    if (login == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "login_required"
-        );
-    }
-
-    if (!login->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "login_must_be_string"
-        );
-    }
-
-    if (password == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "password_required"
-        );
-    }
-
-    if (!password->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "password_must_be_string"
-        );
-    }
+    validator.throw_if_invalid();
 
     try {
         const LoginResult result =
             auth_service.login(
-                login->get<std::string>(),
-                password->get<std::string>()
+                std::move(*login),
+                std::move(*password)
             );
 
         return make_json_response(
             http::status::ok,
-            make_login_result_json(
-                result
-            )
+            make_login_result_json(result)
         );
-    } catch (
-        const AuthError& error
-    ) {
-        return make_auth_error_response(
-            error
-        );
+    } catch (const AuthError& error) {
+        return make_auth_error_response(error);
     }
 }
 
@@ -488,79 +404,32 @@ HttpResponse refresh_handler(
     AuthService& auth_service,
     const HttpRequest& request
 ) {
-    if (!has_json_content_type(request)) {
-        return make_json_error(
-            http::status::
-                unsupported_media_type,
-            "unsupported_media_type"
-        );
-    }
+    const Json body =
+        parse_json_object(request);
 
-    if (request.body().empty()) {
-        return make_json_error(
-            http::status::bad_request,
-            "empty_body"
-        );
-    }
+    JsonObjectValidator validator(body);
 
-    Json body;
-
-    try {
-        body = Json::parse(
-            request.body()
+    auto refresh_token =
+        validator.required_string(
+            "refresh_token",
+            1,
+            512
         );
-    } catch (
-        const Json::parse_error&
-    ) {
-        return make_json_error(
-            http::status::bad_request,
-            "invalid_json"
-        );
-    }
 
-    if (!body.is_object()) {
-        return make_json_error(
-            http::status::bad_request,
-            "json_object_required"
-        );
-    }
-
-    const auto refresh_token =
-        body.find("refresh_token");
-
-    if (refresh_token == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "refresh_token_required"
-        );
-    }
-
-    if (!refresh_token->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "refresh_token_must_be_string"
-        );
-    }
+    validator.throw_if_invalid();
 
     try {
         const LoginResult result =
             auth_service.refresh(
-                refresh_token
-                    ->get<std::string>()
+                *refresh_token
             );
 
         return make_json_response(
             http::status::ok,
-            make_login_result_json(
-                result
-            )
+            make_login_result_json(result)
         );
-    } catch (
-        const AuthError& error
-    ) {
-        return make_auth_error_response(
-            error
-        );
+    } catch (const AuthError& error) {
+        return make_auth_error_response(error);
     }
 }
 
@@ -569,18 +438,12 @@ HttpResponse logout_handler(
     const HttpRequest& request
 ) {
     const auto access_token =
-        extract_bearer_token(
-            request
-        );
+        extract_bearer_token(request);
 
     if (!access_token.has_value()) {
         return make_missing_token_response();
     }
 
-    /*
-     * 提供了格式正确的 Bearer Token 后，
-     * logout 保持幂等。
-     */
     static_cast<void>(
         auth_service.logout_access_token(
             *access_token
@@ -592,10 +455,7 @@ HttpResponse logout_handler(
         request.version()
     };
 
-    response.keep_alive(
-        request.keep_alive()
-    );
-
+    response.keep_alive(request.keep_alive());
     response.prepare_payload();
 
     return response;
@@ -606,9 +466,7 @@ HttpResponse logout_all_handler(
     const HttpRequest& request
 ) {
     const auto access_token =
-        extract_bearer_token(
-            request
-        );
+        extract_bearer_token(request);
 
     if (!access_token.has_value()) {
         return make_missing_token_response();
@@ -616,10 +474,9 @@ HttpResponse logout_all_handler(
 
     try {
         const auto revoked_sessions =
-            auth_service
-                .logout_all_access_token(
-                    *access_token
-                );
+            auth_service.logout_all_access_token(
+                *access_token
+            );
 
         return make_json_response(
             http::status::ok,
@@ -630,12 +487,8 @@ HttpResponse logout_all_handler(
                 }
             }
         );
-    } catch (
-        const AuthError& error
-    ) {
-        return make_auth_error_response(
-            error
-        );
+    } catch (const AuthError& error) {
+        return make_auth_error_response(error);
     }
 }
 
@@ -644,9 +497,7 @@ HttpResponse me_handler(
     const HttpRequest& request
 ) {
     const auto access_token =
-        extract_bearer_token(
-            request
-        );
+        extract_bearer_token(request);
 
     if (!access_token.has_value()) {
         return make_missing_token_response();
@@ -654,112 +505,44 @@ HttpResponse me_handler(
 
     try {
         const User user =
-            auth_service
-                .authenticate_access_token(
-                    *access_token
-                );
+            auth_service.authenticate_access_token(
+                *access_token
+            );
 
         return make_json_response(
             http::status::ok,
             Json{
                 {
                     "user",
-                    make_public_user_json(
-                        user
-                    )
+                    make_public_user_json(user)
                 }
             }
         );
-    } catch (
-        const AuthError& error
-    ) {
-        return make_auth_error_response(
-            error
-        );
+    } catch (const AuthError& error) {
+        return make_auth_error_response(error);
     }
 }
 
 HttpResponse echo_handler(
     const HttpRequest& request
 ) {
-    if (!has_json_content_type(request)) {
-        return make_json_error(
-            http::status::
-                unsupported_media_type,
-            "unsupported_media_type"
-        );
-    }
+    const Json body =
+        parse_json_object(request);
 
-    if (request.body().empty()) {
-        return make_json_error(
-            http::status::bad_request,
-            "empty_body"
-        );
-    }
+    JsonObjectValidator validator(body);
 
-    Json body;
-
-    try {
-        body = Json::parse(
-            request.body()
-        );
-    } catch (
-        const Json::parse_error&
-    ) {
-        return make_json_error(
-            http::status::bad_request,
-            "invalid_json"
-        );
-    }
-
-    if (!body.is_object()) {
-        return make_json_error(
-            http::status::bad_request,
-            "json_object_required"
-        );
-    }
-
-    const auto message =
-        body.find("message");
-
-    if (message == body.end()) {
-        return make_json_error(
-            http::status::bad_request,
-            "message_required"
-        );
-    }
-
-    if (!message->is_string()) {
-        return make_json_error(
-            http::status::bad_request,
-            "message_must_be_string"
-        );
-    }
-
-    const std::string value =
-        message->get<std::string>();
-
-    if (value.empty()) {
-        return make_json_error(
-            http::status::bad_request,
-            "message_must_not_be_empty"
-        );
-    }
-
-    if (
-        value.size() >
+    auto message = validator.required_string(
+        "message",
+        1,
         max_echo_message_size
-    ) {
-        return make_json_error(
-            http::status::bad_request,
-            "message_too_long"
-        );
-    }
+    );
+
+    validator.throw_if_invalid();
 
     return make_json_response(
         http::status::ok,
         Json{
-            {"message", value},
+            {"message", *message},
             {"received", true}
         }
     );
@@ -781,10 +564,7 @@ void register_routes(
 
     router.get(
         "/ready",
-        [
-            &database,
-            &service_state
-        ](
+        [&database, &service_state](
             const HttpRequest& request
         ) {
             return ready_handler(

@@ -87,7 +87,10 @@ set(
     src/http/admin_routes.cpp
     src/http/account_routes.cpp
     src/http/metrics_routes.cpp
+    src/http/api_error.cpp
     src/http/json_utils.cpp
+    src/http/request_id.cpp
+    src/http/request_validation.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
 
@@ -397,6 +400,46 @@ if(BUILD_TESTING)
         securecore-graceful-shutdown-integration
         PROPERTIES
             TIMEOUT 20
+    )
+
+
+    add_executable(
+        securecore-api-validation-test
+        tests/api_validation_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-api-validation-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-api-validation-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-api-validation-unit
+        COMMAND
+            securecore-api-validation-test
+    )
+
+    add_test(
+        NAME securecore-api-validation-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/api_validation_integration_test.py
+            $<TARGET_FILE:secure-server>
+    )
+
+    set_tests_properties(
+        securecore-api-validation-integration
+        PROPERTIES
+            TIMEOUT 30
     )
 
     add_test(

@@ -117,7 +117,7 @@ private:
     static HttpResponse make_error_response(
         const HttpRequest& request,
         boost::beast::http::status status,
-        std::string body
+        std::string_view error_code
     );
 
     static std::string make_allow_header(

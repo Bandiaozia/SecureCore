@@ -1,6 +1,8 @@
 #include "secure/http/http_server.hpp"
 
 #include "secure/http/http_session.hpp"
+#include "secure/http/json_utils.hpp"
+#include "secure/http/request_id.hpp"
 #include "secure/http/http_types.hpp"
 #include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
@@ -293,9 +295,13 @@ void HttpServer::reject_connection(
 
     auto response =
         std::make_shared<HttpResponse>(
-            http::status::service_unavailable,
-            11
+            make_json_error(
+                http::status::service_unavailable,
+                "connection_limit_reached"
+            )
         );
+
+    response->version(11);
 
     response->set(
         http::field::server,
@@ -303,21 +309,27 @@ void HttpServer::reject_connection(
     );
 
     response->set(
-        http::field::content_type,
-        "application/json; charset=utf-8"
-    );
-
-    response->set(
         http::field::retry_after,
         "1"
     );
 
+    response->set(
+        http::field::cache_control,
+        "no-store"
+    );
+
+    response->set(
+        "X-Content-Type-Options",
+        "nosniff"
+    );
+
     response->keep_alive(false);
-
-    response->body() =
-        R"({"error":"connection_limit_reached"})";
-
     response->prepare_payload();
+
+    apply_request_id(
+        *response,
+        generate_request_id()
+    );
 
     stream->expires_after(
         limits_.write_timeout

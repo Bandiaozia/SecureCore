@@ -268,10 +268,44 @@ class SecureCoreHttpTests(unittest.TestCase):
             expected_status
         )
 
-        self.assertEqual(
-            json.loads(response_body),
-            expected_body
-        )
+        parsed_body = json.loads(response_body)
+
+        if (
+            set(expected_body) == {"error"}
+            and isinstance(
+                expected_body["error"],
+                str,
+            )
+        ):
+            self.assertIn("error", parsed_body)
+
+            error = parsed_body["error"]
+
+            self.assertIsInstance(error, dict)
+            self.assertEqual(
+                error.get("code"),
+                expected_body["error"],
+            )
+            self.assertIsInstance(
+                error.get("message"),
+                str,
+            )
+            self.assertTrue(error["message"])
+            self.assertIsInstance(
+                error.get("request_id"),
+                str,
+            )
+            self.assertEqual(
+                response_headers.get(
+                    "x-request-id"
+                ),
+                error["request_id"],
+            )
+        else:
+            self.assertEqual(
+                parsed_body,
+                expected_body
+            )
 
         return response_headers
 
@@ -418,8 +452,8 @@ class SecureCoreHttpTests(unittest.TestCase):
         self.assert_json(
             "POST",
             "/v1/echo",
-            400,
-            {"error": "message_required"},
+            422,
+            {"error": "validation_failed"},
             body="{}",
             headers={
                 "Content-Type":
@@ -433,10 +467,10 @@ class SecureCoreHttpTests(unittest.TestCase):
         self.assert_json(
             "POST",
             "/v1/echo",
-            400,
+            422,
             {
                 "error":
-                    "message_must_be_string"
+                    "validation_failed"
             },
             body='{"message":123}',
             headers={
@@ -524,7 +558,7 @@ class SecureCoreHttpTests(unittest.TestCase):
         )
 
         self.assertIn(
-            '{"error":"headers_too_large"}',
+            '"code":"headers_too_large"',
             response,
         )
 
@@ -783,8 +817,8 @@ class SecureCoreHttpTests(unittest.TestCase):
                     )
 
                     self.assertIn(
-                        '{"error":'
-                        '"connection_limit_reached"}',
+                        '"code":'
+                        '"connection_limit_reached"',
                         raw_response,
                     )
 

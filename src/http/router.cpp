@@ -1,5 +1,7 @@
 #include "secure/http/router.hpp"
 
+#include "secure/http/json_utils.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
@@ -275,7 +277,7 @@ HttpResponse Router::dispatch(const HttpRequest& request) const {
         return make_error_response(
             request,
             http::status::bad_request,
-            R"({"error":"bad_request"})"
+            "bad_request"
         );
     }
 
@@ -286,7 +288,7 @@ HttpResponse Router::dispatch(const HttpRequest& request) const {
             HttpResponse response = make_error_response(
                 request,
                 http::status::method_not_allowed,
-                R"({"error":"method_not_allowed"})"
+                "method_not_allowed"
             );
             response.set(http::field::allow, make_allow_header(exact->second));
             return response;
@@ -308,7 +310,7 @@ HttpResponse Router::dispatch(const HttpRequest& request) const {
             HttpResponse response = make_error_response(
                 request,
                 http::status::method_not_allowed,
-                R"({"error":"method_not_allowed"})"
+                "method_not_allowed"
             );
             response.set(http::field::allow, make_allow_header(route.methods));
             return response;
@@ -322,7 +324,7 @@ HttpResponse Router::dispatch(const HttpRequest& request) const {
     return make_error_response(
         request,
         http::status::not_found,
-        R"({"error":"not_found"})"
+        "not_found"
     );
 }
 
@@ -495,10 +497,14 @@ void Router::finalize_response(
 HttpResponse Router::make_error_response(
     const HttpRequest& request,
     http::status status,
-    std::string body
+    std::string_view error_code
 ) {
-    HttpResponse response{status, request.version()};
-    response.body() = std::move(body);
+    HttpResponse response =
+        make_json_error(
+            status,
+            error_code
+        );
+
     finalize_response(response, request);
     return response;
 }

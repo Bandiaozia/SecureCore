@@ -1,5 +1,6 @@
 #pragma once
 
+#include "secure/http/api_error.hpp"
 #include "secure/http/http_types.hpp"
 
 #include <string_view>
@@ -22,10 +23,6 @@ HttpResponse make_json_response(
     const Json& body
 );
 
-[[nodiscard]]
-HttpResponse make_json_error(
-    boost::beast::http::status status,
-    std::string_view error_code
-);
+
 
 }  // namespace secure

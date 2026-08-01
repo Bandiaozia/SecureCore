@@ -91,19 +91,5 @@ HttpResponse make_json_response(
     return response;
 }
 
-HttpResponse make_json_error(
-    http::status status,
-    std::string_view error_code
-) {
-    return make_json_response(
-        status,
-        Json{
-            {
-                "error",
-                std::string(error_code)
-            }
-        }
-    );
-}
 
 }  // namespace secure

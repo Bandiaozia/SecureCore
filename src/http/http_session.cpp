@@ -1,6 +1,7 @@
 #include "secure/http/http_session.hpp"
 
 #include "secure/http/json_utils.hpp"
+#include "secure/http/request_id.hpp"
 #include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
@@ -295,6 +296,17 @@ void HttpSession::handle_request() {
             std::move(request_)
         );
 
+    const std::string request_id =
+        resolve_request_id(*request);
+
+    request->set(
+        "X-Request-ID",
+        request_id
+    );
+
+    const unsigned request_version =
+        request->version();
+
     const std::string client_ip =
         client_ip_;
 
@@ -306,7 +318,8 @@ void HttpSession::handle_request() {
             [
                 self,
                 request = std::move(request),
-                client_ip
+                client_ip,
+                request_id
             ] {
                 HttpResponse response;
 
@@ -358,6 +371,11 @@ void HttpSession::handle_request() {
                     response.keep_alive(false);
 
                     response.prepare_payload();
+
+                    apply_request_id(
+                        response,
+                        request_id
+                    );
                 } catch (...) {
                     self->logger_.error(
                         "Unknown worker request "
@@ -383,6 +401,11 @@ void HttpSession::handle_request() {
                     response.keep_alive(false);
 
                     response.prepare_payload();
+
+                    apply_request_id(
+                        response,
+                        request_id
+                    );
                 }
 
                 boost::asio::post(
@@ -426,7 +449,7 @@ void HttpSession::handle_request() {
         );
 
     response.version(
-        request->version()
+        request_version
     );
 
     response.set(
@@ -452,6 +475,11 @@ void HttpSession::handle_request() {
     response.keep_alive(false);
 
     response.prepare_payload();
+
+    apply_request_id(
+        response,
+        request_id
+    );
 
     metrics_registry_.record_http_response(
         response.result_int(),
@@ -492,6 +520,11 @@ void HttpSession::reject_new_request_during_drain() {
     response.set(http::field::cache_control, "no-store");
     response.keep_alive(false);
     response.prepare_payload();
+
+    apply_request_id(
+        response,
+        resolve_request_id(request_)
+    );
 
     metrics_registry_.record_http_response(
         response.result_int(),
@@ -639,6 +672,11 @@ void HttpSession::send_protocol_error(
     response.keep_alive(false);
 
     response.prepare_payload();
+
+    apply_request_id(
+        response,
+        generate_request_id()
+    );
 
     metrics_registry_.record_http_response(
         response.result_int(),
