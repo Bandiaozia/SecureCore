@@ -71,6 +71,11 @@ public:
     [[nodiscard]]
     std::int64_t count_enabled_admins();
 
+    bool set_password_hash(
+        std::int64_t user_id,
+        std::string_view password_hash
+    );
+
     bool set_role(
         std::int64_t user_id,
         std::string_view role

@@ -75,6 +75,7 @@ set(
     src/http/router.cpp
     src/http/routes.cpp
     src/http/admin_routes.cpp
+    src/http/account_routes.cpp
     src/http/json_utils.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
@@ -91,6 +92,7 @@ set(
     src/service/user_service.cpp
     src/service/auth_service.cpp
     src/service/admin_service.cpp
+    src/service/account_security_service.cpp
 )
 
 add_library(
