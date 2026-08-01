@@ -81,6 +81,11 @@ WorkerPool::try_submit(
         );
 
         if (!accepting_) {
+            rejected_tasks_.fetch_add(
+                1,
+                std::memory_order_relaxed
+            );
+
             return SubmitResult::stopped;
         }
 
@@ -88,11 +93,21 @@ WorkerPool::try_submit(
             tasks_.size() >=
             queue_capacity_
         ) {
+            rejected_tasks_.fetch_add(
+                1,
+                std::memory_order_relaxed
+            );
+
             return SubmitResult::queue_full;
         }
 
         tasks_.push_back(
             std::move(task)
+        );
+
+        queued_tasks_.fetch_add(
+            1,
+            std::memory_order_relaxed
         );
     }
 
@@ -144,6 +159,26 @@ std::size_t WorkerPool::queue_capacity()
     return queue_capacity_;
 }
 
+WorkerPoolSnapshot WorkerPool::snapshot()
+    const noexcept {
+    return WorkerPoolSnapshot{
+        thread_count_,
+        queue_capacity_,
+        queued_tasks_.load(
+            std::memory_order_relaxed
+        ),
+        active_tasks_.load(
+            std::memory_order_relaxed
+        ),
+        completed_tasks_.load(
+            std::memory_order_relaxed
+        ),
+        rejected_tasks_.load(
+            std::memory_order_relaxed
+        )
+    };
+}
+
 void WorkerPool::worker_loop() noexcept {
     while (true) {
         Task task;
@@ -176,18 +211,32 @@ void WorkerPool::worker_loop() noexcept {
             );
 
             tasks_.pop_front();
+
+            queued_tasks_.fetch_sub(
+                1,
+                std::memory_order_relaxed
+            );
+
+            active_tasks_.fetch_add(
+                1,
+                std::memory_order_relaxed
+            );
         }
 
         try {
             task();
         } catch (...) {
-            /*
-             * 单个任务不能导致工作线程退出。
-             *
-             * HTTP 任务本身会把异常转换成 500；
-             * 这里是最后一道保护。
-             */
         }
+
+        active_tasks_.fetch_sub(
+            1,
+            std::memory_order_relaxed
+        );
+
+        completed_tasks_.fetch_add(
+            1,
+            std::memory_order_relaxed
+        );
     }
 }
 

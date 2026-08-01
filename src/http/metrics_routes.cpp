@@ -1,0 +1,161 @@
+#include "secure/http/metrics_routes.hpp"
+
+#include "secure/http/http_types.hpp"
+#include "secure/http/router.hpp"
+#include "secure/observability/metrics_registry.hpp"
+#include "secure/runtime/worker_pool.hpp"
+
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+#include <boost/beast/http.hpp>
+
+namespace secure {
+
+namespace http = boost::beast::http;
+
+namespace {
+
+HttpResponse metrics_handler(
+    MetricsRegistry& metrics_registry,
+    WorkerPool& worker_pool,
+    const HttpRequest& request
+) {
+    const MetricsSnapshot metrics =
+        metrics_registry.snapshot();
+
+    const WorkerPoolSnapshot workers =
+        worker_pool.snapshot();
+
+    const double duration_seconds =
+        static_cast<double>(
+            metrics
+                .http_request_duration_microseconds_total
+        ) /
+        1'000'000.0;
+
+    std::ostringstream output;
+
+    output
+        << "# HELP securecore_up Whether SecureCore is running.\n"
+        << "# TYPE securecore_up gauge\n"
+        << "securecore_up 1\n"
+        << "# HELP securecore_uptime_seconds Process uptime.\n"
+        << "# TYPE securecore_uptime_seconds gauge\n"
+        << "securecore_uptime_seconds "
+        << metrics.uptime_seconds
+        << "\n"
+        << "# HELP securecore_http_requests_total Completed HTTP requests.\n"
+        << "# TYPE securecore_http_requests_total counter\n"
+        << "securecore_http_requests_total "
+        << metrics.http_requests_total
+        << "\n"
+        << "# HELP securecore_http_responses_total HTTP responses by status class.\n"
+        << "# TYPE securecore_http_responses_total counter\n"
+        << "securecore_http_responses_total{class=\"2xx\"} "
+        << metrics.http_responses_2xx
+        << "\n"
+        << "securecore_http_responses_total{class=\"3xx\"} "
+        << metrics.http_responses_3xx
+        << "\n"
+        << "securecore_http_responses_total{class=\"4xx\"} "
+        << metrics.http_responses_4xx
+        << "\n"
+        << "securecore_http_responses_total{class=\"5xx\"} "
+        << metrics.http_responses_5xx
+        << "\n"
+        << "# HELP securecore_http_request_duration_seconds_sum Cumulative request duration.\n"
+        << "# TYPE securecore_http_request_duration_seconds_sum counter\n"
+        << "securecore_http_request_duration_seconds_sum "
+        << std::fixed
+        << std::setprecision(6)
+        << duration_seconds
+        << "\n"
+        << "# HELP securecore_http_request_duration_seconds_count Timed HTTP requests.\n"
+        << "# TYPE securecore_http_request_duration_seconds_count counter\n"
+        << "securecore_http_request_duration_seconds_count "
+        << metrics.http_requests_total
+        << "\n"
+        << "# HELP securecore_http_connections_active Active HTTP connections.\n"
+        << "# TYPE securecore_http_connections_active gauge\n"
+        << "securecore_http_connections_active "
+        << metrics.http_connections_active
+        << "\n"
+        << "# HELP securecore_http_connections_opened_total Opened HTTP connections.\n"
+        << "# TYPE securecore_http_connections_opened_total counter\n"
+        << "securecore_http_connections_opened_total "
+        << metrics.http_connections_opened_total
+        << "\n"
+        << "# HELP securecore_worker_threads Worker thread count.\n"
+        << "# TYPE securecore_worker_threads gauge\n"
+        << "securecore_worker_threads "
+        << workers.thread_count
+        << "\n"
+        << "# HELP securecore_worker_queue_capacity Worker queue capacity.\n"
+        << "# TYPE securecore_worker_queue_capacity gauge\n"
+        << "securecore_worker_queue_capacity "
+        << workers.queue_capacity
+        << "\n"
+        << "# HELP securecore_worker_queue_size Queued worker tasks.\n"
+        << "# TYPE securecore_worker_queue_size gauge\n"
+        << "securecore_worker_queue_size "
+        << workers.queued_tasks
+        << "\n"
+        << "# HELP securecore_worker_active_tasks Active worker tasks.\n"
+        << "# TYPE securecore_worker_active_tasks gauge\n"
+        << "securecore_worker_active_tasks "
+        << workers.active_tasks
+        << "\n"
+        << "# HELP securecore_worker_completed_tasks_total Completed worker tasks.\n"
+        << "# TYPE securecore_worker_completed_tasks_total counter\n"
+        << "securecore_worker_completed_tasks_total "
+        << workers.completed_tasks
+        << "\n"
+        << "# HELP securecore_worker_rejected_tasks_total Rejected worker submissions.\n"
+        << "# TYPE securecore_worker_rejected_tasks_total counter\n"
+        << "securecore_worker_rejected_tasks_total "
+        << workers.rejected_tasks
+        << "\n";
+
+    HttpResponse response{
+        http::status::ok,
+        request.version()
+    };
+
+    response.set(
+        http::field::content_type,
+        "text/plain; version=0.0.4; "
+        "charset=utf-8"
+    );
+
+    response.body() = output.str();
+
+    return response;
+}
+
+}  // namespace
+
+void register_metrics_routes(
+    Router& router,
+    MetricsRegistry& metrics_registry,
+    WorkerPool& worker_pool
+) {
+    router.get(
+        "/metrics",
+        [
+            &metrics_registry,
+            &worker_pool
+        ](
+            const HttpRequest& request
+        ) {
+            return metrics_handler(
+                metrics_registry,
+                worker_pool,
+                request
+            );
+        }
+    );
+}
+
+}  // namespace secure

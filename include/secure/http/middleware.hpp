@@ -10,6 +10,7 @@
 namespace secure {
 
 class Logger;
+class MetricsRegistry;
 class RateLimiter;
 
 struct RequestContext final {
@@ -56,7 +57,8 @@ private:
 void register_default_middlewares(
     MiddlewarePipeline& pipeline,
     RateLimiter& rate_limiter,
-    Logger& logger
+    Logger& logger,
+    MetricsRegistry& metrics_registry
 );
 
 }  // namespace secure

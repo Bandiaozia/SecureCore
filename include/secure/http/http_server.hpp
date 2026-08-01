@@ -13,6 +13,7 @@
 namespace secure {
 
 class Logger;
+class MetricsRegistry;
 class MiddlewarePipeline;
 class Router;
 class WorkerPool;
@@ -27,6 +28,7 @@ public:
         Router& router,
         MiddlewarePipeline& middleware_pipeline,
         WorkerPool& worker_pool,
+        MetricsRegistry& metrics_registry,
         HttpLimits limits
     );
 
@@ -50,6 +52,8 @@ private:
     MiddlewarePipeline& middleware_pipeline_;
 
     WorkerPool& worker_pool_;
+
+    MetricsRegistry& metrics_registry_;
 
     HttpLimits limits_;
 

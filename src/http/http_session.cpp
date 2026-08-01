@@ -5,8 +5,10 @@
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
+#include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 
+#include <chrono>
 #include <exception>
 #include <memory>
 #include <string>
@@ -33,6 +35,7 @@ HttpSession::HttpSession(
     Router& router,
     MiddlewarePipeline& middleware_pipeline,
     WorkerPool& worker_pool,
+    MetricsRegistry& metrics_registry,
     const HttpLimits& limits
 )
     : stream_(std::move(socket)),
@@ -48,6 +51,7 @@ HttpSession::HttpSession(
           middleware_pipeline
       ),
       worker_pool_(worker_pool),
+      metrics_registry_(metrics_registry),
       limits_(limits) {
     boost::system::error_code error;
 
@@ -62,6 +66,8 @@ HttpSession::HttpSession(
         client_ip_ =
             endpoint.address().to_string();
     }
+
+    metrics_registry_.connection_opened();
 }
 
 void HttpSession::start() {
@@ -111,6 +117,8 @@ void HttpSession::do_stop() {
     }
 
     stopped_ = true;
+
+    metrics_registry_.connection_closed();
 
     boost::system::error_code ignored_error;
 
@@ -391,6 +399,11 @@ void HttpSession::handle_request() {
 
     response.prepare_payload();
 
+    metrics_registry_.record_http_response(
+        response.result_int(),
+        std::chrono::microseconds{0}
+    );
+
     send_response(
         std::move(response)
     );
@@ -515,6 +528,11 @@ void HttpSession::send_protocol_error(
     response.keep_alive(false);
 
     response.prepare_payload();
+
+    metrics_registry_.record_http_response(
+        response.result_int(),
+        std::chrono::microseconds{0}
+    );
 
     send_response(
         std::move(response)
