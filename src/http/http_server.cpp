@@ -9,7 +9,9 @@
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 
+#include <chrono>
 #include <cstddef>
+#include <future>
 #include <memory>
 #include <utility>
 
@@ -126,6 +128,15 @@ void HttpServer::start() {
     );
 }
 
+void HttpServer::begin_draining() {
+    boost::asio::dispatch(
+        strand_,
+        [this] {
+            do_begin_draining();
+        }
+    );
+}
+
 void HttpServer::stop() {
     boost::asio::dispatch(
         strand_,
@@ -135,13 +146,65 @@ void HttpServer::stop() {
     );
 }
 
-void HttpServer::do_stop() {
-    if (stopped_) {
-        return;
+bool HttpServer::force_stop_and_wait(
+    std::chrono::milliseconds timeout
+) {
+    const auto deadline =
+        std::chrono::steady_clock::now() +
+        timeout;
+
+    auto completion =
+        std::make_shared<std::promise<void>>();
+
+    std::future<void> finished =
+        completion->get_future();
+
+    boost::asio::dispatch(
+        strand_,
+        [
+            this,
+            completion
+        ] {
+            do_stop();
+            completion->set_value();
+        }
+    );
+
+    if (
+        finished.wait_until(deadline) !=
+        std::future_status::ready
+    ) {
+        return false;
     }
 
-    stopped_ = true;
+    const auto now =
+        std::chrono::steady_clock::now();
 
+    if (now >= deadline) {
+        return connection_manager_.size() == 0;
+    }
+
+    return connection_manager_.wait_until_empty(
+        std::chrono::duration_cast<
+            std::chrono::milliseconds
+        >(deadline - now)
+    );
+}
+
+bool HttpServer::wait_until_idle(
+    std::chrono::milliseconds timeout
+) const {
+    return connection_manager_.wait_until_empty(
+        timeout
+    );
+}
+
+std::size_t HttpServer::active_connections()
+    const {
+    return connection_manager_.size();
+}
+
+void HttpServer::close_acceptor() {
     boost::system::error_code error;
 
     acceptor_.cancel(error);
@@ -161,7 +224,36 @@ void HttpServer::do_stop() {
             error.message()
         );
     }
+}
 
+void HttpServer::do_begin_draining() {
+    if (draining_ || stopped_) {
+        return;
+    }
+
+    draining_ = true;
+    close_acceptor();
+
+    connection_manager_.drain_all();
+
+    logger_.info(
+        protocol_name(),
+        " server stopped accepting new "
+        "connections. Draining ",
+        connection_manager_.size(),
+        " active connection(s)."
+    );
+}
+
+void HttpServer::do_stop() {
+    if (stopped_) {
+        return;
+    }
+
+    draining_ = true;
+    stopped_ = true;
+
+    close_acceptor();
     connection_manager_.stop_all();
 
     logger_.info(
@@ -264,6 +356,7 @@ void HttpServer::reject_connection(
 void HttpServer::do_accept() {
     if (
         stopped_ ||
+        draining_ ||
         !acceptor_.is_open()
     ) {
         return;
@@ -278,7 +371,8 @@ void HttpServer::do_accept() {
             ) {
                 if (
                     !error &&
-                    !stopped_
+                    !stopped_ &&
+                    !draining_
                 ) {
                     if (
                         connection_manager_.full()
@@ -350,11 +444,25 @@ void HttpServer::do_accept() {
                         }
                     }
                 } else if (
+                    !error &&
+                    (stopped_ || draining_)
+                ) {
+                    boost::system::error_code
+                        ignored_error;
+
+                    socket.shutdown(
+                        tcp::socket::shutdown_both,
+                        ignored_error
+                    );
+
+                    socket.close(ignored_error);
+                } else if (
                     error &&
                     error !=
                         boost::asio::error::
                             operation_aborted &&
-                    !stopped_
+                    !stopped_ &&
+                    !draining_
                 ) {
                     logger_.error(
                         protocol_name(),
@@ -365,6 +473,7 @@ void HttpServer::do_accept() {
 
                 if (
                     !stopped_ &&
+                    !draining_ &&
                     acceptor_.is_open()
                 ) {
                     do_accept();

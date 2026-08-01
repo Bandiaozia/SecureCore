@@ -25,6 +25,7 @@ constexpr std::array environment_variables{
     "SECURECORE_IO_THREADS",
     "SECURECORE_WORKER_THREADS",
     "SECURECORE_WORKER_QUEUE_CAPACITY",
+    "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
     "SECURECORE_TLS_ENABLED",
     "SECURECORE_TLS_CERTIFICATE_FILE",
     "SECURECORE_TLS_PRIVATE_KEY_FILE",
@@ -143,6 +144,7 @@ std::string base_config(
         "io_threads=2\n"
         "worker_threads=3\n"
         "worker_queue_capacity=32\n"
+        "shutdown_grace_period_ms=1500\n"
         "tls_enabled=false\n"
         "http_max_connections=64\n"
         "http_rate_limit_requests=10\n"
@@ -199,6 +201,11 @@ int main() {
         );
 
         require(
+            config.shutdown_grace_period_ms() == 1500,
+            "File shutdown grace period was not loaded"
+        );
+
+        require(
             config.database_acquire_timeout_ms() == 250,
             "File database timeout was not loaded"
         );
@@ -244,6 +251,12 @@ int main() {
         );
 
         ::setenv(
+            "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
+            "2750",
+            1
+        );
+
+        ::setenv(
             "SECURECORE_ENVIRONMENT",
             "test",
             1
@@ -279,6 +292,11 @@ int main() {
             "Environment mode was not overridden"
         );
 
+        require(
+            config.shutdown_grace_period_ms() == 2750,
+            "Environment did not override shutdown grace period"
+        );
+
         ::setenv(
             "SECURECORE_LISTEN_PORT",
             "not-a-port",
@@ -301,6 +319,7 @@ int main() {
         ::unsetenv("SECURECORE_WORKER_THREADS");
         ::unsetenv("SECURECORE_DATABASE_POOL_SIZE");
         ::unsetenv("SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS");
+        ::unsetenv("SECURECORE_SHUTDOWN_GRACE_PERIOD_MS");
         ::unsetenv("SECURECORE_ENVIRONMENT");
 
         write_file(

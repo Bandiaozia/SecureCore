@@ -28,6 +28,23 @@ namespace http = beast::http;
 
 using boost::asio::ip::tcp;
 
+namespace {
+
+bool allowed_during_drain(
+    const HttpRequest& request
+) {
+    const auto target = request.target();
+    const auto query = target.find('?');
+    const auto path = target.substr(0, query);
+
+    return (
+        path == "/ready" ||
+        path == "/metrics"
+    );
+}
+
+}  // namespace
+
 HttpSession::HttpSession(
     tcp::socket socket,
     ConnectionManager& connection_manager,
@@ -81,13 +98,24 @@ void HttpSession::start() {
     );
 }
 
+void HttpSession::drain() {
+    auto self = shared_from_this();
+
+    boost::asio::dispatch(
+        strand_,
+        [self] {
+            self->do_drain();
+        }
+    );
+}
+
 void HttpSession::stop() {
     auto self = shared_from_this();
 
     boost::asio::dispatch(
         strand_,
         [self] {
-            self->do_stop();
+            self->handle_disconnect({});
         }
     );
 }
@@ -111,13 +139,27 @@ void HttpSession::do_start() {
     do_read();
 }
 
+void HttpSession::do_drain() {
+    if (draining_ || stopped_) {
+        return;
+    }
+
+    draining_ = true;
+
+    if (phase_ == Phase::created) {
+        handle_disconnect({});
+    }
+}
+
 void HttpSession::do_stop() {
     if (stopped_) {
         return;
     }
 
     stopped_ = true;
+    phase_ = Phase::stopped;
 
+    finish_request();
     metrics_registry_.connection_closed();
 
     boost::system::error_code ignored_error;
@@ -141,6 +183,7 @@ void HttpSession::do_read() {
         return;
     }
 
+    phase_ = Phase::reading;
     parser_.emplace();
 
     parser_->header_limit(
@@ -189,6 +232,17 @@ void HttpSession::handle_read(
         parser_.reset();
 
         ++completed_requests_;
+        phase_ = Phase::processing;
+        request_active_ = true;
+        metrics_registry_.request_started();
+
+        if (
+            draining_ &&
+            !allowed_during_drain(request_)
+        ) {
+            reject_new_request_during_drain();
+            return;
+        }
 
         handle_request();
 
@@ -416,9 +470,44 @@ void HttpSession::complete_request(
         return;
     }
 
+    if (draining_) {
+        response.keep_alive(false);
+    }
+
     send_response(
         std::move(response)
     );
+}
+
+void HttpSession::reject_new_request_during_drain() {
+    HttpResponse response =
+        make_json_error(
+            http::status::service_unavailable,
+            "server_shutting_down"
+        );
+
+    response.version(request_.version());
+    response.set(http::field::server, "SecureCore");
+    response.set(http::field::retry_after, "1");
+    response.set(http::field::cache_control, "no-store");
+    response.keep_alive(false);
+    response.prepare_payload();
+
+    metrics_registry_.record_http_response(
+        response.result_int(),
+        std::chrono::microseconds{0}
+    );
+
+    send_response(std::move(response));
+}
+
+void HttpSession::finish_request() noexcept {
+    if (!request_active_) {
+        return;
+    }
+
+    request_active_ = false;
+    metrics_registry_.request_finished();
 }
 
 void HttpSession::send_response(
@@ -428,8 +517,14 @@ void HttpSession::send_response(
         return;
     }
 
+    if (draining_) {
+        response.keep_alive(false);
+    }
+
     const bool should_close =
         response.need_eof();
+
+    phase_ = Phase::writing;
 
     auto shared_response =
         std::make_shared<HttpResponse>(
@@ -463,6 +558,8 @@ void HttpSession::send_response(
                     return;
                 }
 
+                self->finish_request();
+
                 if (error) {
                     if (
                         error ==
@@ -486,6 +583,20 @@ void HttpSession::send_response(
                     return;
                 }
 
+                /*
+                 * 如果 draining 在本次响应开始写出之后才发生，
+                 * 该响应没有携带 Connection: close。此时不能在
+                 * 写完成回调里直接关闭，否则客户端已经发送的
+                 * /ready 或 /metrics 请求会留在套接字中直到超时。
+                 *
+                 * 继续启动一次读取。下一个请求会看到 draining_：
+                 * - /ready、/metrics 可以完成，并以 Connection: close 返回；
+                 * - 其他请求返回 503，并关闭连接。
+                 *
+                 * 如果响应是在 draining 状态下开始发送的，
+                 * send_response() 已把 keep_alive 设为 false，
+                 * 因而 should_close 本身就是 true。
+                 */
                 if (should_close) {
                     self->handle_disconnect(
                         {}

@@ -5,6 +5,7 @@
 #include "secure/http/router.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
+#include "secure/runtime/service_state.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -22,6 +23,7 @@ HttpResponse metrics_handler(
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
     Database& database,
+    ServiceState& service_state,
     const HttpRequest& request
 ) {
     const MetricsSnapshot metrics =
@@ -32,6 +34,9 @@ HttpResponse metrics_handler(
 
     const DatabasePoolSnapshot database_pool =
         database.pool_snapshot();
+
+    const ServicePhase service_phase =
+        service_state.phase();
 
     const double duration_seconds =
         static_cast<double>(
@@ -45,7 +50,27 @@ HttpResponse metrics_handler(
     output
         << "# HELP securecore_up Whether SecureCore is running.\n"
         << "# TYPE securecore_up gauge\n"
-        << "securecore_up 1\n"
+        << "securecore_up "
+        << (
+            service_phase == ServicePhase::stopped
+                ? 0
+                : 1
+        )
+        << "\n"
+        << "# HELP securecore_server_state Current server lifecycle state.\n"
+        << "# TYPE securecore_server_state gauge\n"
+        << "securecore_server_state{state=\"starting\"} "
+        << (service_phase == ServicePhase::starting ? 1 : 0)
+        << "\n"
+        << "securecore_server_state{state=\"running\"} "
+        << (service_phase == ServicePhase::running ? 1 : 0)
+        << "\n"
+        << "securecore_server_state{state=\"draining\"} "
+        << (service_phase == ServicePhase::draining ? 1 : 0)
+        << "\n"
+        << "securecore_server_state{state=\"stopped\"} "
+        << (service_phase == ServicePhase::stopped ? 1 : 0)
+        << "\n"
         << "# HELP securecore_uptime_seconds Process uptime.\n"
         << "# TYPE securecore_uptime_seconds gauge\n"
         << "securecore_uptime_seconds "
@@ -55,6 +80,11 @@ HttpResponse metrics_handler(
         << "# TYPE securecore_http_requests_total counter\n"
         << "securecore_http_requests_total "
         << metrics.http_requests_total
+        << "\n"
+        << "# HELP securecore_http_requests_in_flight HTTP requests currently being processed or written.\n"
+        << "# TYPE securecore_http_requests_in_flight gauge\n"
+        << "securecore_http_requests_in_flight "
+        << metrics.http_requests_in_flight
         << "\n"
         << "# HELP securecore_http_responses_total HTTP responses by status class.\n"
         << "# TYPE securecore_http_responses_total counter\n"
@@ -175,14 +205,16 @@ void register_metrics_routes(
     Router& router,
     MetricsRegistry& metrics_registry,
     WorkerPool& worker_pool,
-    Database& database
+    Database& database,
+    ServiceState& service_state
 ) {
     router.get(
         "/metrics",
         [
             &metrics_registry,
             &worker_pool,
-            &database
+            &database,
+            &service_state
         ](
             const HttpRequest& request
         ) {
@@ -190,6 +222,7 @@ void register_metrics_routes(
                 metrics_registry,
                 worker_pool,
                 database,
+                service_state,
                 request
             );
         }

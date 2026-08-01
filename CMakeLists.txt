@@ -68,6 +68,7 @@ set(
     SECURECORE_SOURCES
 
     src/runtime/server_application.cpp
+    src/runtime/service_state.cpp
     src/runtime/worker_pool.cpp
 
     src/observability/metrics_registry.cpp
@@ -356,6 +357,46 @@ if(BUILD_TESTING)
         NAME securecore-database-pool-unit
         COMMAND
             securecore-database-pool-test
+    )
+
+
+    add_executable(
+        securecore-graceful-shutdown-components-test
+        tests/graceful_shutdown_components_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-graceful-shutdown-components-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-graceful-shutdown-components-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-graceful-shutdown-unit
+        COMMAND
+            securecore-graceful-shutdown-components-test
+    )
+
+    add_test(
+        NAME securecore-graceful-shutdown-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/graceful_shutdown_test.py
+            $<TARGET_FILE:secure-server>
+    )
+
+    set_tests_properties(
+        securecore-graceful-shutdown-integration
+        PROPERTIES
+            TIMEOUT 20
     )
 
     add_test(

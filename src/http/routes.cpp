@@ -7,6 +7,7 @@
 #include "secure/model/user.hpp"
 #include "secure/service/auth_service.hpp"
 #include "secure/service/user_service.hpp"
+#include "secure/runtime/service_state.hpp"
 
 #include <cstddef>
 #include <optional>
@@ -37,9 +38,34 @@ HttpResponse health_handler(
 
 HttpResponse ready_handler(
     Database& database,
+    ServiceState& service_state,
     const HttpRequest&
 ) {
-    if (database.healthy()) {
+    const bool database_ready = database.healthy();
+
+    if (!service_state.ready()) {
+        return make_json_response(
+            http::status::service_unavailable,
+            Json{
+                {
+                    "status",
+                    std::string(
+                        ServiceState::name(
+                            service_state.phase()
+                        )
+                    )
+                },
+                {
+                    "database",
+                    database_ready
+                        ? "ok"
+                        : "unavailable"
+                }
+            }
+        );
+    }
+
+    if (database_ready) {
         return make_json_response(
             http::status::ok,
             Json{
@@ -744,6 +770,7 @@ HttpResponse echo_handler(
 void register_routes(
     Router& router,
     Database& database,
+    ServiceState& service_state,
     UserService& user_service,
     AuthService& auth_service
 ) {
@@ -754,11 +781,15 @@ void register_routes(
 
     router.get(
         "/ready",
-        [&database](
+        [
+            &database,
+            &service_state
+        ](
             const HttpRequest& request
         ) {
             return ready_handler(
                 database,
+                service_state,
                 request
             );
         }

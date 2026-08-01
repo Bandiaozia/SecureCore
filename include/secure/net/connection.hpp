@@ -8,6 +8,8 @@ public:
 
     virtual void start() = 0;
 
+    virtual void drain() = 0;
+
     virtual void stop() = 0;
 };
 

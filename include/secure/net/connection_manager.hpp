@@ -2,6 +2,8 @@
 
 #include "secure/net/connection.hpp"
 
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -23,18 +25,30 @@ public:
         const std::shared_ptr<Connection>& connection
     );
 
+    void drain_all();
+
     void stop_all();
 
+    [[nodiscard]]
+    bool wait_until_empty(
+        std::chrono::milliseconds timeout
+    ) const;
+
+    [[nodiscard]]
     std::size_t size() const;
 
+    [[nodiscard]]
     std::size_t capacity() const noexcept;
 
+    [[nodiscard]]
     bool full() const;
 
 private:
     const std::size_t max_connections_;
 
     mutable std::mutex mutex_;
+
+    mutable std::condition_variable empty_condition_;
 
     std::unordered_set<
         std::shared_ptr<Connection>

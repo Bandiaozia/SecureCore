@@ -46,6 +46,8 @@ public:
 
     void start() override;
 
+    void drain() override;
+
     void stop() override;
 
 private:
@@ -54,7 +56,17 @@ private:
             boost::beast::http::string_body
         >;
 
+    enum class Phase {
+        created,
+        reading,
+        processing,
+        writing,
+        stopped
+    };
+
     void do_start();
+
+    void do_drain();
 
     void do_stop();
 
@@ -69,6 +81,10 @@ private:
     void complete_request(
         HttpResponse response
     );
+
+    void reject_new_request_during_drain();
+
+    void finish_request() noexcept;
 
     void send_response(
         HttpResponse response
@@ -112,6 +128,12 @@ private:
     HttpRequest request_;
 
     std::size_t completed_requests_{0};
+
+    Phase phase_{Phase::created};
+
+    bool request_active_{false};
+
+    bool draining_{false};
 
     bool stopped_{false};
 
