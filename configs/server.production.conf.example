@@ -32,3 +32,4 @@ http_max_body_bytes=1048576
 http_read_timeout_seconds=10
 http_write_timeout_seconds=10
 http_idle_timeout_seconds=30
+audit_retention_days=90

@@ -9,6 +9,7 @@
 #include "secure/model/user.hpp"
 #include "secure/runtime/service_state.hpp"
 #include "secure/service/auth_service.hpp"
+#include "secure/service/audit_service.hpp"
 #include "secure/service/user_service.hpp"
 
 #include <optional>
@@ -272,6 +273,7 @@ HttpResponse registration_error_response(
 
 HttpResponse register_handler(
     UserService& user_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const Json body =
@@ -355,14 +357,46 @@ HttpResponse register_handler(
                 std::to_string(user.id)
         );
 
+        audit_service.record(
+            AuditRecord{
+                user.id,
+                "user.register",
+                "success",
+                "user",
+                user.id,
+                Json{
+                    {"username", user.username}
+                }.dump()
+            }
+        );
+
         return response;
     } catch (const RegistrationError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "user.register",
+                "failure",
+                "user",
+                std::nullopt,
+                Json{
+                    {
+                        "reason",
+                        registration_error_name(
+                            error.code()
+                        )
+                    }
+                }.dump()
+            }
+        );
+
         return registration_error_response(error);
     }
 }
 
 HttpResponse login_handler(
     AuthService& auth_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const Json body =
@@ -391,17 +425,42 @@ HttpResponse login_handler(
                 std::move(*password)
             );
 
+        audit_service.record(
+            AuditRecord{
+                result.user.id,
+                "auth.login",
+                "success",
+                "user",
+                result.user.id,
+                Json::object().dump()
+            }
+        );
+
         return make_json_response(
             http::status::ok,
             make_login_result_json(result)
         );
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "auth.login",
+                "failure",
+                "user",
+                std::nullopt,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return make_auth_error_response(error);
     }
 }
 
 HttpResponse refresh_handler(
     AuthService& auth_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const Json body =
@@ -424,17 +483,42 @@ HttpResponse refresh_handler(
                 *refresh_token
             );
 
+        audit_service.record(
+            AuditRecord{
+                result.user.id,
+                "auth.refresh",
+                "success",
+                "user",
+                result.user.id,
+                Json::object().dump()
+            }
+        );
+
         return make_json_response(
             http::status::ok,
             make_login_result_json(result)
         );
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "auth.refresh",
+                "failure",
+                "authentication_session",
+                std::nullopt,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return make_auth_error_response(error);
     }
 }
 
 HttpResponse logout_handler(
     AuthService& auth_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const auto access_token =
@@ -444,10 +528,24 @@ HttpResponse logout_handler(
         return make_missing_token_response();
     }
 
-    static_cast<void>(
+    const LogoutResult result =
         auth_service.logout_access_token(
             *access_token
-        )
+        );
+
+    audit_service.record(
+        AuditRecord{
+            result.user_id,
+            "auth.logout",
+            result.revoked
+                ? "success"
+                : "failure",
+            "authentication_session",
+            std::nullopt,
+            Json{
+                {"revoked", result.revoked}
+            }.dump()
+        }
     );
 
     HttpResponse response{
@@ -463,6 +561,7 @@ HttpResponse logout_handler(
 
 HttpResponse logout_all_handler(
     AuthService& auth_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const auto access_token =
@@ -473,21 +572,50 @@ HttpResponse logout_all_handler(
     }
 
     try {
-        const auto revoked_sessions =
+        const LogoutAllResult result =
             auth_service.logout_all_access_token(
                 *access_token
             );
+
+        audit_service.record(
+            AuditRecord{
+                result.user_id,
+                "auth.logout_all",
+                "success",
+                "user",
+                result.user_id,
+                Json{
+                    {
+                        "revoked_sessions",
+                        result.revoked_sessions
+                    }
+                }.dump()
+            }
+        );
 
         return make_json_response(
             http::status::ok,
             Json{
                 {
                     "revoked_sessions",
-                    revoked_sessions
+                    result.revoked_sessions
                 }
             }
         );
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "auth.logout_all",
+                "failure",
+                "user",
+                std::nullopt,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return make_auth_error_response(error);
     }
 }
@@ -555,7 +683,8 @@ void register_routes(
     Database& database,
     ServiceState& service_state,
     UserService& user_service,
-    AuthService& auth_service
+    AuthService& auth_service,
+    AuditService& audit_service
 ) {
     router.get(
         "/health",
@@ -577,11 +706,12 @@ void register_routes(
 
     router.post(
         "/v1/auth/register",
-        [&user_service](
+        [&user_service, &audit_service](
             const HttpRequest& request
         ) {
             return register_handler(
                 user_service,
+                audit_service,
                 request
             );
         }
@@ -589,11 +719,12 @@ void register_routes(
 
     router.post(
         "/v1/auth/login",
-        [&auth_service](
+        [&auth_service, &audit_service](
             const HttpRequest& request
         ) {
             return login_handler(
                 auth_service,
+                audit_service,
                 request
             );
         }
@@ -601,11 +732,12 @@ void register_routes(
 
     router.post(
         "/v1/auth/refresh",
-        [&auth_service](
+        [&auth_service, &audit_service](
             const HttpRequest& request
         ) {
             return refresh_handler(
                 auth_service,
+                audit_service,
                 request
             );
         }
@@ -613,11 +745,12 @@ void register_routes(
 
     router.post(
         "/v1/auth/logout",
-        [&auth_service](
+        [&auth_service, &audit_service](
             const HttpRequest& request
         ) {
             return logout_handler(
                 auth_service,
+                audit_service,
                 request
             );
         }
@@ -625,11 +758,12 @@ void register_routes(
 
     router.post(
         "/v1/auth/logout-all",
-        [&auth_service](
+        [&auth_service, &audit_service](
             const HttpRequest& request
         ) {
             return logout_all_handler(
                 auth_service,
+                audit_service,
                 request
             );
         }

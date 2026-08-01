@@ -32,3 +32,7 @@ File databases use WAL mode so separate pooled connections can read in
 parallel. SQLite still serializes write transactions. Plain `:memory:`
 databases are automatically restricted to one connection because each
 `:memory:` connection owns an isolated database.
+
+## Security audit retention
+
+`audit_retention_days` (or `SECURECORE_AUDIT_RETENTION_DAYS`) controls startup cleanup of audit events older than 1 to 3650 days. The default is 90 days.

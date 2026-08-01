@@ -68,6 +68,10 @@ constexpr std::array environment_mappings{
         "shutdown_grace_period_ms"
     },
     EnvironmentMapping{
+        "SECURECORE_AUDIT_RETENTION_DAYS",
+        "audit_retention_days"
+    },
+    EnvironmentMapping{
         "SECURECORE_TLS_ENABLED",
         "tls_enabled"
     },
@@ -575,6 +579,19 @@ void ServerConfig::apply_setting(
                     600000
                 )
             );
+    } else if (
+        key == "audit_retention_days"
+    ) {
+        audit_retention_days_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    3650
+                )
+            );
     } else if (key == "tls_enabled") {
         tls_enabled_ = parse_boolean(
             value,
@@ -861,6 +878,8 @@ std::string ServerConfig::redacted_summary()
         << worker_queue_capacity_
         << ", shutdown_grace_period_ms="
         << shutdown_grace_period_ms_
+        << ", audit_retention_days="
+        << audit_retention_days_
         << ", max_connections="
         << http_max_connections_
         << ", rate_limit="
@@ -934,6 +953,12 @@ std::uint32_t
 ServerConfig::shutdown_grace_period_ms()
     const noexcept {
     return shutdown_grace_period_ms_;
+}
+
+std::uint32_t
+ServerConfig::audit_retention_days()
+    const noexcept {
+    return audit_retention_days_;
 }
 
 bool ServerConfig::tls_enabled()

@@ -8,6 +8,7 @@
 #include "secure/model/user.hpp"
 #include "secure/service/admin_service.hpp"
 #include "secure/service/auth_service.hpp"
+#include "secure/service/audit_service.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -264,6 +265,7 @@ HttpResponse get_user_handler(
 
 HttpResponse set_user_status_handler(
     AdminService& admin_service,
+    AuditService& audit_service,
     const HttpRequest& request,
     const RouteParameters& parameters
 ) {
@@ -300,6 +302,25 @@ HttpResponse set_user_status_handler(
                 *enabled
             );
 
+        audit_service.record(
+            AuditRecord{
+                result.administrator_id,
+                *enabled
+                    ? "admin.user_enable"
+                    : "admin.user_disable",
+                "success",
+                "user",
+                result.user.id,
+                Json{
+                    {"enabled", result.user.enabled},
+                    {
+                        "revoked_sessions",
+                        result.revoked_sessions
+                    }
+                }.dump()
+            }
+        );
+
         return make_json_response(
             http::status::ok,
             Json{
@@ -316,8 +337,38 @@ HttpResponse set_user_status_handler(
             }
         );
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                *enabled
+                    ? "admin.user_enable"
+                    : "admin.user_disable",
+                "failure",
+                "user",
+                user_id,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return auth_error_response(error);
     } catch (const AdminError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                *enabled
+                    ? "admin.user_enable"
+                    : "admin.user_disable",
+                "failure",
+                "user",
+                user_id,
+                Json{
+                    {"reason", admin_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return admin_error_response(error);
     }
 }
@@ -326,7 +377,8 @@ HttpResponse set_user_status_handler(
 
 void register_admin_routes(
     Router& router,
-    AdminService& admin_service
+    AdminService& admin_service,
+    AuditService& audit_service
 ) {
     router.get(
         "/v1/admin/users",
@@ -356,12 +408,13 @@ void register_admin_routes(
 
     router.patch(
         "/v1/admin/users/{id}/status",
-        [&admin_service](
+        [&admin_service, &audit_service](
             const HttpRequest& request,
             const RouteParameters& parameters
         ) {
             return set_user_status_handler(
                 admin_service,
+                audit_service,
                 request,
                 parameters
             );

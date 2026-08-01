@@ -181,6 +181,16 @@ HttpResponse metrics_handler(
         << "# TYPE securecore_database_acquire_timeouts_total counter\n"
         << "securecore_database_acquire_timeouts_total "
         << database_pool.timeouts_total
+        << "\n"
+        << "# HELP securecore_audit_events_recorded_total Persisted security audit events.\n"
+        << "# TYPE securecore_audit_events_recorded_total counter\n"
+        << "securecore_audit_events_recorded_total "
+        << metrics.audit_events_recorded_total
+        << "\n"
+        << "# HELP securecore_audit_events_failed_total Audit events that could not be persisted.\n"
+        << "# TYPE securecore_audit_events_failed_total counter\n"
+        << "securecore_audit_events_failed_total "
+        << metrics.audit_events_failed_total
         << "\n";
 
     HttpResponse response{

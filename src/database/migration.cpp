@@ -119,6 +119,78 @@ CREATE INDEX IF NOT EXISTS
     idx_auth_sessions_refresh_expires_at
 ON auth_sessions(refresh_expires_at);
 )SQL"
+            },
+            {
+                3,
+                "create_audit_events",
+                R"SQL(
+CREATE TABLE IF NOT EXISTS audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    actor_user_id INTEGER,
+
+    event_type TEXT NOT NULL,
+
+    outcome TEXT NOT NULL
+        CHECK (
+            outcome IN ('success', 'failure')
+        ),
+
+    target_type TEXT NOT NULL
+        DEFAULT '',
+
+    target_id INTEGER,
+
+    request_id TEXT NOT NULL
+        DEFAULT '',
+
+    client_ip TEXT NOT NULL
+        DEFAULT '',
+
+    user_agent TEXT NOT NULL
+        DEFAULT '',
+
+    metadata_json TEXT NOT NULL
+        DEFAULT '{}'
+        CHECK (
+            json_valid(metadata_json)
+        ),
+
+    created_at TEXT NOT NULL
+        DEFAULT (
+            strftime(
+                '%Y-%m-%dT%H:%M:%fZ',
+                'now'
+            )
+        )
+);
+
+CREATE INDEX IF NOT EXISTS
+    idx_audit_events_created_at
+ON audit_events(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS
+    idx_audit_events_event_type
+ON audit_events(event_type, id DESC);
+
+CREATE INDEX IF NOT EXISTS
+    idx_audit_events_actor_user_id
+ON audit_events(actor_user_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS
+    idx_audit_events_outcome
+ON audit_events(outcome, id DESC);
+
+CREATE TRIGGER IF NOT EXISTS
+    prevent_audit_event_updates
+BEFORE UPDATE ON audit_events
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'audit events are append-only'
+    );
+END;
+)SQL"
             }
         };
 
