@@ -118,6 +118,12 @@ public:
         std::int64_t user_id
     );
 
+    [[nodiscard]]
+    std::int64_t revoke_family(
+        DatabaseTransaction& transaction,
+        std::string_view token_family_id
+    );
+
     std::int64_t delete_expired(
         std::int64_t current_time
     );

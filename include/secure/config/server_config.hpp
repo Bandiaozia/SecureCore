@@ -55,6 +55,26 @@ public:
     std::uint32_t
     audit_retention_days() const noexcept;
 
+    std::uint32_t
+    auth_login_account_failure_limit()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_ip_failure_limit()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_failure_window_seconds()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_lockout_seconds()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_max_lockout_seconds()
+        const noexcept;
+
     bool tls_enabled() const noexcept;
 
     const std::string&
@@ -136,6 +156,21 @@ private:
         shutdown_grace_period_ms_{10000};
 
     std::uint32_t audit_retention_days_{90};
+
+    std::uint32_t
+        auth_login_account_failure_limit_{5};
+
+    std::uint32_t
+        auth_login_ip_failure_limit_{20};
+
+    std::uint32_t
+        auth_login_failure_window_seconds_{300};
+
+    std::uint32_t
+        auth_login_lockout_seconds_{300};
+
+    std::uint32_t
+        auth_login_max_lockout_seconds_{3600};
 
     bool tls_enabled_{false};
 

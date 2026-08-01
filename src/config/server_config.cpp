@@ -72,6 +72,26 @@ constexpr std::array environment_mappings{
         "audit_retention_days"
     },
     EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
+        "auth_login_account_failure_limit"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_IP_FAILURE_LIMIT",
+        "auth_login_ip_failure_limit"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_FAILURE_WINDOW_SECONDS",
+        "auth_login_failure_window_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_LOCKOUT_SECONDS",
+        "auth_login_lockout_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
+        "auth_login_max_lockout_seconds"
+    },
+    EnvironmentMapping{
         "SECURECORE_TLS_ENABLED",
         "tls_enabled"
     },
@@ -592,6 +612,71 @@ void ServerConfig::apply_setting(
                     3650
                 )
             );
+    } else if (
+        key == "auth_login_account_failure_limit"
+    ) {
+        auth_login_account_failure_limit_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    1000
+                )
+            );
+    } else if (
+        key == "auth_login_ip_failure_limit"
+    ) {
+        auth_login_ip_failure_limit_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    100000
+                )
+            );
+    } else if (
+        key == "auth_login_failure_window_seconds"
+    ) {
+        auth_login_failure_window_seconds_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    86400
+                )
+            );
+    } else if (
+        key == "auth_login_lockout_seconds"
+    ) {
+        auth_login_lockout_seconds_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    86400
+                )
+            );
+    } else if (
+        key == "auth_login_max_lockout_seconds"
+    ) {
+        auth_login_max_lockout_seconds_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    1,
+                    604800
+                )
+            );
     } else if (key == "tls_enabled") {
         tls_enabled_ = parse_boolean(
             value,
@@ -794,6 +879,17 @@ void ServerConfig::validate_common() const {
             "database_path must not be empty"
         );
     }
+
+    if (
+        auth_login_max_lockout_seconds_ <
+        auth_login_lockout_seconds_
+    ) {
+        throw std::runtime_error(
+            "auth_login_max_lockout_seconds must "
+            "be greater than or equal to "
+            "auth_login_lockout_seconds"
+        );
+    }
 }
 
 void ServerConfig::validate_for_server() const {
@@ -880,6 +976,17 @@ std::string ServerConfig::redacted_summary()
         << shutdown_grace_period_ms_
         << ", audit_retention_days="
         << audit_retention_days_
+        << ", auth_login_limits="
+        << auth_login_account_failure_limit_
+        << "/account,"
+        << auth_login_ip_failure_limit_
+        << "/ip per "
+        << auth_login_failure_window_seconds_
+        << "s, lockout="
+        << auth_login_lockout_seconds_
+        << "-"
+        << auth_login_max_lockout_seconds_
+        << "s"
         << ", max_connections="
         << http_max_connections_
         << ", rate_limit="
@@ -959,6 +1066,36 @@ std::uint32_t
 ServerConfig::audit_retention_days()
     const noexcept {
     return audit_retention_days_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_account_failure_limit()
+    const noexcept {
+    return auth_login_account_failure_limit_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_ip_failure_limit()
+    const noexcept {
+    return auth_login_ip_failure_limit_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_failure_window_seconds()
+    const noexcept {
+    return auth_login_failure_window_seconds_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_lockout_seconds()
+    const noexcept {
+    return auth_login_lockout_seconds_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_max_lockout_seconds()
+    const noexcept {
+    return auth_login_max_lockout_seconds_;
 }
 
 bool ServerConfig::tls_enabled()

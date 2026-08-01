@@ -77,3 +77,12 @@ securecore_audit_events_failed_total
 
 A failed audit write does not fail the original user operation. It is logged as
 an application error and increments the failure counter.
+
+## Authentication-abuse events
+
+`auth.login_throttled` is written when the account or source-IP failure tracker
+rejects a login. Metadata contains only the stable reason and retry duration.
+
+`auth.refresh_reuse` is written when a previously revoked refresh token is
+submitted. SecureCore revokes the complete token family before responding.
+Passwords and token values are never included.

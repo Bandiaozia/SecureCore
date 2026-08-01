@@ -191,6 +191,31 @@ BEGIN
     );
 END;
 )SQL"
+            },
+            {
+                4,
+                "add_refresh_token_families",
+                R"SQL(
+ALTER TABLE auth_sessions
+ADD COLUMN token_family_id TEXT NOT NULL
+    DEFAULT '';
+
+ALTER TABLE auth_sessions
+ADD COLUMN parent_session_id INTEGER;
+
+UPDATE auth_sessions
+SET token_family_id =
+    'legacy-' || CAST(id AS TEXT)
+WHERE token_family_id = '';
+
+CREATE INDEX IF NOT EXISTS
+    idx_auth_sessions_token_family_id
+ON auth_sessions(token_family_id, id);
+
+CREATE INDEX IF NOT EXISTS
+    idx_auth_sessions_parent_session_id
+ON auth_sessions(parent_session_id);
+)SQL"
             }
         };
 

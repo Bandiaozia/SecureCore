@@ -54,6 +54,12 @@ int main() {
     metrics.audit_event_recorded();
     metrics.audit_event_failed();
 
+    metrics.auth_login_success();
+    metrics.auth_login_failure();
+    metrics.auth_login_failure();
+    metrics.auth_login_throttled();
+    metrics.auth_refresh_reuse();
+
     const auto snapshot =
         metrics.snapshot();
 
@@ -108,6 +114,26 @@ int main() {
     require(
         snapshot.audit_events_failed_total == 1,
         "audit event failures"
+    );
+
+    require(
+        snapshot.auth_login_success_total == 1,
+        "login success total"
+    );
+
+    require(
+        snapshot.auth_login_failure_total == 2,
+        "login failure total"
+    );
+
+    require(
+        snapshot.auth_login_throttled_total == 1,
+        "login throttled total"
+    );
+
+    require(
+        snapshot.auth_refresh_reuse_total == 1,
+        "refresh reuse total"
     );
 
     std::cout

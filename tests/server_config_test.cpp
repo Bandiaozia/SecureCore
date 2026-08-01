@@ -27,6 +27,11 @@ constexpr std::array environment_variables{
     "SECURECORE_WORKER_QUEUE_CAPACITY",
     "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
     "SECURECORE_AUDIT_RETENTION_DAYS",
+    "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
+    "SECURECORE_AUTH_LOGIN_IP_FAILURE_LIMIT",
+    "SECURECORE_AUTH_LOGIN_FAILURE_WINDOW_SECONDS",
+    "SECURECORE_AUTH_LOGIN_LOCKOUT_SECONDS",
+    "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
     "SECURECORE_TLS_ENABLED",
     "SECURECORE_TLS_CERTIFICATE_FILE",
     "SECURECORE_TLS_PRIVATE_KEY_FILE",
@@ -147,6 +152,11 @@ std::string base_config(
         "worker_queue_capacity=32\n"
         "shutdown_grace_period_ms=1500\n"
         "audit_retention_days=45\n"
+        "auth_login_account_failure_limit=4\n"
+        "auth_login_ip_failure_limit=12\n"
+        "auth_login_failure_window_seconds=90\n"
+        "auth_login_lockout_seconds=15\n"
+        "auth_login_max_lockout_seconds=120\n"
         "tls_enabled=false\n"
         "http_max_connections=64\n"
         "http_rate_limit_requests=10\n"
@@ -213,6 +223,31 @@ int main() {
         );
 
         require(
+            config.auth_login_account_failure_limit() == 4,
+            "File account failure limit was not loaded"
+        );
+
+        require(
+            config.auth_login_ip_failure_limit() == 12,
+            "File IP failure limit was not loaded"
+        );
+
+        require(
+            config.auth_login_failure_window_seconds() == 90,
+            "File login failure window was not loaded"
+        );
+
+        require(
+            config.auth_login_lockout_seconds() == 15,
+            "File login lockout was not loaded"
+        );
+
+        require(
+            config.auth_login_max_lockout_seconds() == 120,
+            "File maximum login lockout was not loaded"
+        );
+
+        require(
             config.database_acquire_timeout_ms() == 250,
             "File database timeout was not loaded"
         );
@@ -270,6 +305,18 @@ int main() {
         );
 
         ::setenv(
+            "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
+            "6",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
+            "240",
+            1
+        );
+
+        ::setenv(
             "SECURECORE_ENVIRONMENT",
             "test",
             1
@@ -315,6 +362,16 @@ int main() {
             "Environment did not override audit retention"
         );
 
+        require(
+            config.auth_login_account_failure_limit() == 6,
+            "Environment did not override account failure limit"
+        );
+
+        require(
+            config.auth_login_max_lockout_seconds() == 240,
+            "Environment did not override maximum lockout"
+        );
+
         ::setenv(
             "SECURECORE_LISTEN_PORT",
             "not-a-port",
@@ -339,7 +396,27 @@ int main() {
         ::unsetenv("SECURECORE_DATABASE_ACQUIRE_TIMEOUT_MS");
         ::unsetenv("SECURECORE_SHUTDOWN_GRACE_PERIOD_MS");
         ::unsetenv("SECURECORE_AUDIT_RETENTION_DAYS");
+        ::unsetenv("SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT");
+        ::unsetenv("SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS");
         ::unsetenv("SECURECORE_ENVIRONMENT");
+
+        write_file(
+            config_path,
+            base_config(root) +
+            "auth_login_lockout_seconds=120\n"
+            "auth_login_max_lockout_seconds=60\n"
+        );
+
+        require_throws(
+            [&] {
+                static_cast<void>(
+                    secure::ServerConfig::load_from_file(
+                        config_path.string()
+                    )
+                );
+            },
+            "auth_login_max_lockout_seconds"
+        );
 
         write_file(
             config_path,

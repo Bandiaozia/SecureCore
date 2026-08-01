@@ -36,3 +36,12 @@ All JSON error responses use one envelope:
 - `503 Service Unavailable`: overload, connection limit, or graceful shutdown.
 
 Clients should branch on `error.code`, not the human-readable `message`.
+
+## Authentication abuse errors
+
+`login_throttled` uses HTTP `429` and includes a `Retry-After` response header.
+It does not reveal whether the submitted login identifier exists.
+
+`refresh_token_reused` uses HTTP `401`. The complete refresh-token family is
+revoked before this response is returned, so the client must perform a full
+login.

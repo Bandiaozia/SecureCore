@@ -1,5 +1,6 @@
 #include "secure/http/routes.hpp"
 
+#include "secure/audit/request_audit_context.hpp"
 #include "secure/database/database.hpp"
 #include "secure/http/api_error.hpp"
 #include "secure/http/http_types.hpp"
@@ -173,7 +174,11 @@ http::status auth_error_status(
     case AuthErrorCode::access_token_expired:
     case AuthErrorCode::invalid_refresh_token:
     case AuthErrorCode::refresh_token_expired:
+    case AuthErrorCode::refresh_token_reused:
         return http::status::unauthorized;
+
+    case AuthErrorCode::login_throttled:
+        return http::status::too_many_requests;
 
     case AuthErrorCode::account_disabled:
         return http::status::forbidden;
@@ -204,6 +209,18 @@ HttpResponse make_auth_error_response(
         );
     }
 
+    if (
+        status == http::status::too_many_requests &&
+        error.retry_after_seconds() > 0
+    ) {
+        response.set(
+            http::field::retry_after,
+            std::to_string(
+                error.retry_after_seconds()
+            )
+        );
+    }
+
     return response;
 }
 
@@ -220,6 +237,20 @@ HttpResponse make_missing_token_response() {
     );
 
     return response;
+}
+
+std::string current_client_ip() {
+    const auto context =
+        current_request_audit_context();
+
+    if (
+        context.has_value() &&
+        !context->client_ip.empty()
+    ) {
+        return context->client_ip;
+    }
+
+    return "<unknown>";
 }
 
 HttpResponse registration_error_response(
@@ -422,7 +453,8 @@ HttpResponse login_handler(
         const LoginResult result =
             auth_service.login(
                 std::move(*login),
-                std::move(*password)
+                std::move(*password),
+                current_client_ip()
             );
 
         audit_service.record(
@@ -441,16 +473,25 @@ HttpResponse login_handler(
             make_login_result_json(result)
         );
     } catch (const AuthError& error) {
+        Json metadata{
+            {"reason", auth_error_name(error.code())}
+        };
+
+        if (error.retry_after_seconds() > 0) {
+            metadata["retry_after_seconds"] =
+                error.retry_after_seconds();
+        }
+
         audit_service.record(
             AuditRecord{
                 std::nullopt,
-                "auth.login",
+                error.code() == AuthErrorCode::login_throttled
+                    ? "auth.login_throttled"
+                    : "auth.login",
                 "failure",
                 "user",
                 std::nullopt,
-                Json{
-                    {"reason", auth_error_name(error.code())}
-                }.dump()
+                metadata.dump()
             }
         );
 
@@ -502,7 +543,9 @@ HttpResponse refresh_handler(
         audit_service.record(
             AuditRecord{
                 std::nullopt,
-                "auth.refresh",
+                error.code() == AuthErrorCode::refresh_token_reused
+                    ? "auth.refresh_reuse"
+                    : "auth.refresh",
                 "failure",
                 "authentication_session",
                 std::nullopt,

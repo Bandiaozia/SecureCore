@@ -36,3 +36,27 @@ databases are automatically restricted to one connection because each
 ## Security audit retention
 
 `audit_retention_days` (or `SECURECORE_AUDIT_RETENTION_DAYS`) controls startup cleanup of audit events older than 1 to 3650 days. The default is 90 days.
+
+## Authentication abuse protection
+
+Login failures are tracked independently by normalized account identifier and
+client IP address. The tracker is in memory, so restarting the process clears
+active lockouts.
+
+```ini
+auth_login_account_failure_limit=5
+auth_login_ip_failure_limit=20
+auth_login_failure_window_seconds=300
+auth_login_lockout_seconds=300
+auth_login_max_lockout_seconds=3600
+```
+
+When either threshold is reached, `/v1/auth/login` returns HTTP `429` with a
+`Retry-After` header. Repeated lockouts double the lockout duration up to the
+configured maximum. A successful login clears the matching account state.
+IP-wide state expires through the configured failure window so a valid account
+cannot reset abuse
+from the same source address.
+
+Environment-variable equivalents use the `SECURECORE_` prefix, for example
+`SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT`.

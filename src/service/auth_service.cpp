@@ -5,6 +5,8 @@
 #include "secure/model/auth_session.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
+#include "secure/observability/metrics_registry.hpp"
+#include "secure/security/auth_abuse_protector.hpp"
 #include "secure/security/password_hasher.hpp"
 #include "secure/security/token_service.hpp"
 
@@ -68,6 +70,10 @@ std::string_view auth_error_name(
         return "invalid_credentials";
 
     case AuthErrorCode::
+        login_throttled:
+        return "login_throttled";
+
+    case AuthErrorCode::
         account_disabled:
         return "account_disabled";
 
@@ -88,6 +94,10 @@ std::string_view auth_error_name(
         return "refresh_token_expired";
 
     case AuthErrorCode::
+        refresh_token_reused:
+        return "refresh_token_reused";
+
+    case AuthErrorCode::
         token_creation_failed:
         return "token_creation_failed";
     }
@@ -97,17 +107,24 @@ std::string_view auth_error_name(
 
 AuthError::AuthError(
     AuthErrorCode code,
-    std::string message
+    std::string message,
+    std::uint32_t retry_after_seconds
 )
     : std::runtime_error(
           std::move(message)
       ),
-      code_(code) {
+      code_(code),
+      retry_after_seconds_(retry_after_seconds) {
 }
 
 AuthErrorCode AuthError::code()
     const noexcept {
     return code_;
+}
+
+std::uint32_t AuthError::retry_after_seconds()
+    const noexcept {
+    return retry_after_seconds_;
 }
 
 AuthService::AuthService(
@@ -117,6 +134,8 @@ AuthService::AuthService(
         auth_session_repository,
     PasswordHasher& password_hasher,
     TokenService& token_service,
+    AuthAbuseProtector& auth_abuse_protector,
+    MetricsRegistry& metrics_registry,
     std::int64_t
         access_token_lifetime_seconds,
     std::int64_t
@@ -134,6 +153,17 @@ AuthService::AuthService(
       ),
       token_service_(
           token_service
+      ),
+      auth_abuse_protector_(
+          auth_abuse_protector
+      ),
+      metrics_registry_(
+          metrics_registry
+      ),
+      dummy_password_hash_(
+          password_hasher_.hash(
+              "SecureCore timing equalization password"
+          )
       ),
       access_token_lifetime_seconds_(
           access_token_lifetime_seconds
@@ -164,18 +194,41 @@ AuthService::AuthService(
 
 LoginResult AuthService::login(
     std::string login,
-    std::string password
+    std::string password,
+    std::string client_ip
 ) {
     login = trim_copy(login);
+    client_ip = trim_copy(client_ip);
+
+    if (client_ip.empty()) {
+        client_ip = "<unknown>";
+    }
 
     if (
         login.empty() ||
         password.empty()
     ) {
+        metrics_registry_.auth_login_failure();
+
         throw AuthError(
-            AuthErrorCode::
-                invalid_credentials,
+            AuthErrorCode::invalid_credentials,
             "Invalid login or password"
+        );
+    }
+
+    const AuthAbuseDecision before_attempt =
+        auth_abuse_protector_.check(
+            login,
+            client_ip
+        );
+
+    if (!before_attempt.allowed) {
+        metrics_registry_.auth_login_throttled();
+
+        throw AuthError(
+            AuthErrorCode::login_throttled,
+            "Too many failed login attempts",
+            before_attempt.retry_after_seconds
         );
     }
 
@@ -185,30 +238,63 @@ LoginResult AuthService::login(
         );
 
     /*
-     * 用户不存在和密码错误使用同一个错误，
-     * 避免接口泄露账号是否存在。
+     * 不存在的用户同样执行一次 Argon2id 验证，
+     * 避免通过响应时间判断账号是否存在。
      */
+    const std::string_view password_hash =
+        user.has_value()
+            ? std::string_view(user->password_hash)
+            : std::string_view(dummy_password_hash_);
+
+    const bool password_valid =
+        password_hasher_.verify(
+            password,
+            password_hash
+        );
+
     if (
         !user.has_value() ||
-        !password_hasher_.verify(
-            password,
-            user->password_hash
-        )
+        !password_valid
     ) {
+        metrics_registry_.auth_login_failure();
+
+        const AuthAbuseDecision after_failure =
+            auth_abuse_protector_.record_failure(
+                login,
+                client_ip
+            );
+
+        if (!after_failure.allowed) {
+            metrics_registry_.auth_login_throttled();
+
+            throw AuthError(
+                AuthErrorCode::login_throttled,
+                "Too many failed login attempts",
+                after_failure.retry_after_seconds
+            );
+        }
+
         throw AuthError(
-            AuthErrorCode::
-                invalid_credentials,
+            AuthErrorCode::invalid_credentials,
             "Invalid login or password"
         );
     }
 
     if (!user->enabled) {
+        metrics_registry_.auth_login_failure();
+
         throw AuthError(
-            AuthErrorCode::
-                account_disabled,
+            AuthErrorCode::account_disabled,
             "User account is disabled"
         );
     }
+
+    auth_abuse_protector_.record_success(
+        login,
+        client_ip
+    );
+
+    metrics_registry_.auth_login_success();
 
     const std::int64_t now =
         current_unix_time();
@@ -250,13 +336,43 @@ LoginResult AuthService::refresh(
                 token_hash
             );
 
-    if (
-        !session.has_value() ||
-        session->revoked
-    ) {
+    if (!session.has_value()) {
         throw AuthError(
             AuthErrorCode::invalid_refresh_token,
             "Refresh token is invalid"
+        );
+    }
+
+    /*
+     * 数据库仍保存已经轮换或撤销的 Refresh Token 哈希。
+     * 再次提交同一令牌说明它可能被复制或重放。
+     * 事务内撤销整个令牌家族，包含并发刷新刚创建的子会话。
+     */
+    if (session->revoked) {
+        if (session->token_family_id.empty()) {
+            static_cast<void>(
+                auth_session_repository_
+                    .revoke_all_for_user(
+                        transaction,
+                        session->user_id
+                    )
+            );
+        } else {
+            static_cast<void>(
+                auth_session_repository_
+                    .revoke_family(
+                        transaction,
+                        session->token_family_id
+                    )
+            );
+        }
+
+        transaction.commit();
+        metrics_registry_.auth_refresh_reuse();
+
+        throw AuthError(
+            AuthErrorCode::refresh_token_reused,
+            "Refresh token reuse was detected"
         );
     }
 
@@ -317,10 +433,6 @@ LoginResult AuthService::refresh(
         );
     }
 
-    /*
-     * 旧会话撤销和新令牌创建必须处于同一事务。
-     * 新会话创建失败时，旧 Refresh Token 会自动恢复可用。
-     */
     if (
         !auth_session_repository_
              .revoke_by_id(
@@ -328,16 +440,34 @@ LoginResult AuthService::refresh(
                  session->id
              )
     ) {
+        static_cast<void>(
+            auth_session_repository_
+                .revoke_family(
+                    transaction,
+                    session->token_family_id
+                )
+        );
+
+        transaction.commit();
+        metrics_registry_.auth_refresh_reuse();
+
         throw AuthError(
-            AuthErrorCode::invalid_refresh_token,
-            "Refresh token was already used"
+            AuthErrorCode::refresh_token_reused,
+            "Refresh token reuse was detected"
         );
     }
+
+    const std::string family_id =
+        session->token_family_id.empty()
+            ? token_service_.generate_token_family_id()
+            : session->token_family_id;
 
     AuthTokenPair tokens = issue_tokens(
         transaction,
         user->id,
-        now
+        now,
+        family_id,
+        session->id
     );
 
     transaction.commit();
@@ -481,32 +611,27 @@ AuthTokenPair AuthService::issue_tokens(
     std::int64_t user_id,
     std::int64_t current_time
 ) {
-    /*
-     * 随机令牌碰撞概率极低，但数据库设置了
-     * UNIQUE，因此这里最多重试三次。
-     */
+    const std::string token_family_id =
+        token_service_.generate_token_family_id();
+
     for (
         int attempt = 0;
         attempt < 3;
         ++attempt
     ) {
         const GeneratedToken access =
-            token_service_
-                .generate_access_token();
+            token_service_.generate_access_token();
 
         const GeneratedToken refresh =
-            token_service_
-                .generate_refresh_token();
+            token_service_.generate_refresh_token();
 
-        const std::int64_t
-            access_expires_at =
-                current_time +
-                access_token_lifetime_seconds_;
+        const std::int64_t access_expires_at =
+            current_time +
+            access_token_lifetime_seconds_;
 
-        const std::int64_t
-            refresh_expires_at =
-                current_time +
-                refresh_token_lifetime_seconds_;
+        const std::int64_t refresh_expires_at =
+            current_time +
+            refresh_token_lifetime_seconds_;
 
         try {
             static_cast<void>(
@@ -516,7 +641,9 @@ AuthTokenPair AuthService::issue_tokens(
                         access.hash,
                         refresh.hash,
                         access_expires_at,
-                        refresh_expires_at
+                        refresh_expires_at,
+                        token_family_id,
+                        std::nullopt
                     }
                 )
             );
@@ -527,41 +654,39 @@ AuthTokenPair AuthService::issue_tokens(
                 access_expires_at,
                 refresh_expires_at
             };
-        } catch (
-            const DuplicateTokenError&
-        ) {
-            /*
-             * 重新生成随机令牌。
-             */
+        } catch (const DuplicateTokenError&) {
+            /* 重新生成随机令牌。 */
         }
     }
 
     throw AuthError(
-        AuthErrorCode::
-            token_creation_failed,
-        "Could not create authentication "
-        "tokens"
+        AuthErrorCode::token_creation_failed,
+        "Could not create authentication tokens"
     );
 }
-
 
 AuthTokenPair AuthService::issue_tokens(
     DatabaseTransaction& transaction,
     std::int64_t user_id,
-    std::int64_t current_time
+    std::int64_t current_time,
+    std::string token_family_id,
+    std::optional<std::int64_t> parent_session_id
 ) {
+    if (token_family_id.empty()) {
+        token_family_id =
+            token_service_.generate_token_family_id();
+    }
+
     for (
         int attempt = 0;
         attempt < 3;
         ++attempt
     ) {
         const GeneratedToken access =
-            token_service_
-                .generate_access_token();
+            token_service_.generate_access_token();
 
         const GeneratedToken refresh =
-            token_service_
-                .generate_refresh_token();
+            token_service_.generate_refresh_token();
 
         const std::int64_t access_expires_at =
             current_time +
@@ -580,7 +705,9 @@ AuthTokenPair AuthService::issue_tokens(
                         access.hash,
                         refresh.hash,
                         access_expires_at,
-                        refresh_expires_at
+                        refresh_expires_at,
+                        token_family_id,
+                        parent_session_id
                     }
                 )
             );
@@ -591,9 +718,7 @@ AuthTokenPair AuthService::issue_tokens(
                 access_expires_at,
                 refresh_expires_at
             };
-        } catch (
-            const DuplicateTokenError&
-        ) {
+        } catch (const DuplicateTokenError&) {
             /* 重新生成随机令牌。 */
         }
     }
