@@ -1,6 +1,7 @@
 #include "secure/repository/auth_session_repository.hpp"
 
 #include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -299,6 +300,228 @@ LIMIT 1;
     );
 }
 
+
+AuthSession create_locked(
+    sqlite3* handle,
+    const CreateAuthSession& input
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+INSERT INTO auth_sessions (
+    user_id,
+    access_token_hash,
+    refresh_token_hash,
+    access_expires_at,
+    refresh_expires_at
+)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4,
+    ?5
+);
+)SQL"
+    };
+
+    statement.bind_int64(1, input.user_id);
+    statement.bind_text(2, input.access_token_hash);
+    statement.bind_text(3, input.refresh_token_hash);
+    statement.bind_int64(4, input.access_expires_at);
+    statement.bind_int64(5, input.refresh_expires_at);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        const int extended_result =
+            sqlite3_extended_errcode(handle);
+
+        if (
+            extended_result ==
+                SQLITE_CONSTRAINT_UNIQUE ||
+            extended_result ==
+                SQLITE_CONSTRAINT_PRIMARYKEY
+        ) {
+            throw DuplicateTokenError(
+                "Authentication token hash "
+                "already exists"
+            );
+        }
+
+        throw AuthSessionRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Creating auth session",
+                extended_result
+            )
+        );
+    }
+
+    const std::int64_t session_id =
+        sqlite3_last_insert_rowid(handle);
+
+    auto session = find_by_id_locked(
+        handle,
+        session_id
+    );
+
+    if (!session.has_value()) {
+        throw AuthSessionRepositoryError(
+            "Created auth session could not "
+            "be read back"
+        );
+    }
+
+    return std::move(*session);
+}
+
+std::optional<AuthSession>
+find_by_refresh_token_hash_locked(
+    sqlite3* handle,
+    std::string_view token_hash
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+SELECT
+    id,
+    user_id,
+    access_token_hash,
+    refresh_token_hash,
+    access_expires_at,
+    refresh_expires_at,
+    revoked,
+    created_at,
+    revoked_at
+FROM auth_sessions
+WHERE refresh_token_hash = ?1
+LIMIT 1;
+)SQL"
+    };
+
+    statement.bind_text(1, token_hash);
+
+    return read_optional_session(
+        handle,
+        statement
+    );
+}
+
+std::int64_t revoke_all_except_for_user_locked(
+    sqlite3* handle,
+    std::int64_t user_id,
+    std::int64_t excluded_session_id
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE
+    user_id = ?1
+    AND id != ?2
+    AND revoked = 0;
+)SQL"
+    };
+
+    statement.bind_int64(1, user_id);
+    statement.bind_int64(2, excluded_session_id);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw AuthSessionRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Revoking other user sessions",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes64(handle);
+}
+
+bool revoke_by_id_locked(
+    sqlite3* handle,
+    std::int64_t session_id
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE
+    id = ?1
+    AND revoked = 0;
+)SQL"
+    };
+
+    statement.bind_int64(1, session_id);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw AuthSessionRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Revoking auth session",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes(handle) > 0;
+}
+
+std::int64_t revoke_all_for_user_locked(
+    sqlite3* handle,
+    std::int64_t user_id
+) {
+    Statement statement{
+        handle,
+        R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE
+    user_id = ?1
+    AND revoked = 0;
+)SQL"
+    };
+
+    statement.bind_int64(1, user_id);
+
+    const int result = statement.step();
+
+    if (result != SQLITE_DONE) {
+        throw AuthSessionRepositoryError(
+            make_sqlite_error(
+                handle,
+                "Revoking user sessions",
+                result
+            )
+        );
+    }
+
+    return sqlite3_changes64(handle);
+}
+
 }  // namespace
 
 AuthSessionRepository::
@@ -325,104 +548,39 @@ AuthSession AuthSessionRepository::create(
     }
 
     return database_.with_locked_handle(
-        [&input](
-            sqlite3* handle
-        ) -> AuthSession {
-            Statement statement{
-                handle,
-                R"SQL(
-INSERT INTO auth_sessions (
-    user_id,
-    access_token_hash,
-    refresh_token_hash,
-    access_expires_at,
-    refresh_expires_at
-)
-VALUES (
-    ?1,
-    ?2,
-    ?3,
-    ?4,
-    ?5
-);
-)SQL"
-            };
-
-            statement.bind_int64(
-                1,
-                input.user_id
-            );
-
-            statement.bind_text(
-                2,
-                input.access_token_hash
-            );
-
-            statement.bind_text(
-                3,
-                input.refresh_token_hash
-            );
-
-            statement.bind_int64(
-                4,
-                input.access_expires_at
-            );
-
-            statement.bind_int64(
-                5,
-                input.refresh_expires_at
-            );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                const int extended_result =
-                    sqlite3_extended_errcode(
-                        handle
-                    );
-
-                if (
-                    extended_result ==
-                        SQLITE_CONSTRAINT_UNIQUE ||
-                    extended_result ==
-                        SQLITE_CONSTRAINT_PRIMARYKEY
-                ) {
-                    throw DuplicateTokenError(
-                        "Authentication token "
-                        "hash already exists"
-                    );
-                }
-
-                throw AuthSessionRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Creating auth session",
-                        extended_result
-                    )
-                );
-            }
-
-            const std::int64_t session_id =
-                sqlite3_last_insert_rowid(
-                    handle
-                );
-
-            auto session =
-                find_by_id_locked(
-                    handle,
-                    session_id
-                );
-
-            if (!session.has_value()) {
-                throw AuthSessionRepositoryError(
-                    "Created auth session "
-                    "could not be read back"
-                );
-            }
-
-            return std::move(*session);
+        [&input](sqlite3* handle) {
+            return create_locked(handle, input);
         }
+    );
+}
+
+AuthSession AuthSessionRepository::create(
+    DatabaseTransaction& transaction,
+    const CreateAuthSession& input
+) {
+    if (
+        input.user_id <= 0 ||
+        input.access_token_hash.empty() ||
+        input.refresh_token_hash.empty() ||
+        input.access_expires_at <= 0 ||
+        input.refresh_expires_at <=
+            input.access_expires_at
+    ) {
+        throw std::invalid_argument(
+            "Invalid authentication session"
+        );
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return create_locked(
+        transaction.handle(),
+        input
     );
 }
 
@@ -481,38 +639,35 @@ find_by_refresh_token_hash(
     }
 
     return database_.with_locked_handle(
-        [token_hash](
-            sqlite3* handle
-        ) -> std::optional<AuthSession> {
-            Statement statement{
+        [token_hash](sqlite3* handle) {
+            return find_by_refresh_token_hash_locked(
                 handle,
-                R"SQL(
-SELECT
-    id,
-    user_id,
-    access_token_hash,
-    refresh_token_hash,
-    access_expires_at,
-    refresh_expires_at,
-    revoked,
-    created_at,
-    revoked_at
-FROM auth_sessions
-WHERE refresh_token_hash = ?1
-LIMIT 1;
-)SQL"
-            };
-
-            statement.bind_text(
-                1,
                 token_hash
             );
-
-            return read_optional_session(
-                handle,
-                statement
-            );
         }
+    );
+}
+
+std::optional<AuthSession>
+AuthSessionRepository::
+find_by_refresh_token_hash(
+    DatabaseTransaction& transaction,
+    std::string_view token_hash
+) {
+    if (token_hash.empty()) {
+        return std::nullopt;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return find_by_refresh_token_hash_locked(
+        transaction.handle(),
+        token_hash
     );
 }
 
@@ -737,56 +892,43 @@ revoke_all_except_for_user(
     }
 
     return database_.with_locked_handle(
-        [
-            user_id,
-            excluded_session_id
-        ](
+        [user_id, excluded_session_id](
             sqlite3* handle
-        ) -> std::int64_t {
-            Statement statement{
+        ) {
+            return revoke_all_except_for_user_locked(
                 handle,
-                R"SQL(
-UPDATE auth_sessions
-SET
-    revoked = 1,
-    revoked_at = strftime(
-        '%Y-%m-%dT%H:%M:%fZ',
-        'now'
-    )
-WHERE
-    user_id = ?1
-    AND id != ?2
-    AND revoked = 0;
-)SQL"
-            };
-
-            statement.bind_int64(
-                1,
-                user_id
-            );
-
-            statement.bind_int64(
-                2,
+                user_id,
                 excluded_session_id
             );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                throw AuthSessionRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Revoking other user sessions",
-                        result
-                    )
-                );
-            }
-
-            return sqlite3_changes64(
-                handle
-            );
         }
+    );
+}
+
+std::int64_t
+AuthSessionRepository::
+revoke_all_except_for_user(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id,
+    std::int64_t excluded_session_id
+) {
+    if (
+        user_id <= 0 ||
+        excluded_session_id <= 0
+    ) {
+        return 0;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return revoke_all_except_for_user_locked(
+        transaction.handle(),
+        user_id,
+        excluded_session_id
     );
 }
 
@@ -798,47 +940,33 @@ bool AuthSessionRepository::revoke_by_id(
     }
 
     return database_.with_locked_handle(
-        [session_id](
-            sqlite3* handle
-        ) {
-            Statement statement{
+        [session_id](sqlite3* handle) {
+            return revoke_by_id_locked(
                 handle,
-                R"SQL(
-UPDATE auth_sessions
-SET
-    revoked = 1,
-    revoked_at = strftime(
-        '%Y-%m-%dT%H:%M:%fZ',
-        'now'
-    )
-WHERE
-    id = ?1
-    AND revoked = 0;
-)SQL"
-            };
-
-            statement.bind_int64(
-                1,
                 session_id
             );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                throw AuthSessionRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Revoking auth session",
-                        result
-                    )
-                );
-            }
-
-            return (
-                sqlite3_changes(handle) > 0
-            );
         }
+    );
+}
+
+bool AuthSessionRepository::revoke_by_id(
+    DatabaseTransaction& transaction,
+    std::int64_t session_id
+) {
+    if (session_id <= 0) {
+        return false;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return revoke_by_id_locked(
+        transaction.handle(),
+        session_id
     );
 }
 
@@ -905,47 +1033,35 @@ revoke_all_for_user(
     }
 
     return database_.with_locked_handle(
-        [user_id](
-            sqlite3* handle
-        ) -> std::int64_t {
-            Statement statement{
+        [user_id](sqlite3* handle) {
+            return revoke_all_for_user_locked(
                 handle,
-                R"SQL(
-UPDATE auth_sessions
-SET
-    revoked = 1,
-    revoked_at = strftime(
-        '%Y-%m-%dT%H:%M:%fZ',
-        'now'
-    )
-WHERE
-    user_id = ?1
-    AND revoked = 0;
-)SQL"
-            };
-
-            statement.bind_int64(
-                1,
                 user_id
             );
-
-            const int result =
-                statement.step();
-
-            if (result != SQLITE_DONE) {
-                throw AuthSessionRepositoryError(
-                    make_sqlite_error(
-                        handle,
-                        "Revoking user sessions",
-                        result
-                    )
-                );
-            }
-
-            return sqlite3_changes64(
-                handle
-            );
         }
+    );
+}
+
+std::int64_t
+AuthSessionRepository::
+revoke_all_for_user(
+    DatabaseTransaction& transaction,
+    std::int64_t user_id
+) {
+    if (user_id <= 0) {
+        return 0;
+    }
+
+    if (!transaction.belongs_to(database_)) {
+        throw std::invalid_argument(
+            "Auth session repository transaction "
+            "belongs to another database"
+        );
+    }
+
+    return revoke_all_for_user_locked(
+        transaction.handle(),
+        user_id
     );
 }
 

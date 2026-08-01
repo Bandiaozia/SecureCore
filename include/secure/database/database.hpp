@@ -1,5 +1,7 @@
 #pragma once
 
+#include "secure/database/transaction.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -30,6 +32,12 @@ public:
     Database& operator=(
         Database&&
     ) = delete;
+
+    [[nodiscard]]
+    DatabaseTransaction begin_transaction(
+        TransactionMode mode =
+            TransactionMode::immediate
+    );
 
     void execute(
         std::string_view sql
@@ -67,6 +75,8 @@ public:
     }
 
 private:
+    friend class DatabaseTransaction;
+
     sqlite3* handle_{nullptr};
 
     std::filesystem::path path_;

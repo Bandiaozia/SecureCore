@@ -156,6 +156,12 @@ Database::Database(
     }
 }
 
+DatabaseTransaction Database::begin_transaction(
+    TransactionMode mode
+) {
+    return DatabaseTransaction(*this, mode);
+}
+
 Database::~Database() {
     if (handle_ != nullptr) {
         sqlite3_close_v2(handle_);

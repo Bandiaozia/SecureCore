@@ -227,17 +227,20 @@ ServerApplication::ServerApplication(
           password_hasher_
       ),
       auth_service_(
+          database_,
           user_repository_,
           auth_session_repository_,
           password_hasher_,
           token_service_
       ),
       admin_service_(
+          database_,
           auth_service_,
           user_repository_,
           auth_session_repository_
       ),
       account_security_service_(
+          database_,
           auth_service_,
           user_repository_,
           auth_session_repository_,

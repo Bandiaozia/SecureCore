@@ -1,6 +1,7 @@
 #include "secure/database/migration.hpp"
 
 #include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 
 #include <cstdint>
 #include <string>
@@ -173,42 +174,28 @@ FROM schema_migrations;
             continue;
         }
 
-        database_.execute(
-            "BEGIN IMMEDIATE;"
+        auto transaction =
+            database_.begin_transaction();
+
+        transaction.execute(
+            migration.sql
         );
 
-        try {
-            database_.execute(
-                migration.sql
-            );
+        transaction.execute(
+            "INSERT INTO "
+            "schema_migrations "
+            "(version, name) VALUES (" +
+            std::to_string(
+                migration.version
+            ) +
+            ", '" +
+            std::string(
+                migration.name
+            ) +
+            "');"
+        );
 
-            database_.execute(
-                "INSERT INTO "
-                "schema_migrations "
-                "(version, name) VALUES (" +
-                std::to_string(
-                    migration.version
-                ) +
-                ", '" +
-                std::string(
-                    migration.name
-                ) +
-                "');"
-            );
-
-            database_.execute(
-                "COMMIT;"
-            );
-        } catch (...) {
-            try {
-                database_.execute(
-                    "ROLLBACK;"
-                );
-            } catch (...) {
-            }
-
-            throw;
-        }
+        transaction.commit();
     }
 }
 

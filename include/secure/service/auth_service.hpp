@@ -10,6 +10,8 @@
 namespace secure {
 
 class AuthSessionRepository;
+class Database;
+class DatabaseTransaction;
 class PasswordHasher;
 class TokenService;
 class UserRepository;
@@ -64,6 +66,7 @@ struct LoginResult final {
 class AuthService final {
 public:
     AuthService(
+        Database& database,
         UserRepository& user_repository,
         AuthSessionRepository&
             auth_session_repository,
@@ -112,6 +115,15 @@ private:
         std::int64_t user_id,
         std::int64_t current_time
     );
+
+    [[nodiscard]]
+    AuthTokenPair issue_tokens(
+        DatabaseTransaction& transaction,
+        std::int64_t user_id,
+        std::int64_t current_time
+    );
+
+    Database& database_;
 
     UserRepository& user_repository_;
 

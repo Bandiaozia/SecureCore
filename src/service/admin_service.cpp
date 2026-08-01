@@ -1,5 +1,7 @@
 #include "secure/service/admin_service.hpp"
 
+#include "secure/database/database.hpp"
+#include "secure/database/transaction.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 #include "secure/service/auth_service.hpp"
@@ -48,12 +50,14 @@ AdminErrorCode AdminError::code()
 }
 
 AdminService::AdminService(
+    Database& database,
     AuthService& auth_service,
     UserRepository& user_repository,
     AuthSessionRepository&
         auth_session_repository
 )
-    : auth_service_(auth_service),
+    : database_(database),
+      auth_service_(auth_service),
       user_repository_(user_repository),
       auth_session_repository_(
           auth_session_repository
@@ -144,41 +148,42 @@ AdminService::set_user_enabled(
     const User administrator =
         require_admin(access_token);
 
-    const std::optional<User> target =
-        user_repository_.find_by_id(
-            target_user_id
-        );
-
-    if (!target.has_value()) {
-        throw AdminError(
-            AdminErrorCode::
-                user_not_found,
-            "User does not exist"
-        );
-    }
-
     if (
         !enabled &&
-        administrator.id ==
-            target_user_id
+        administrator.id == target_user_id
     ) {
         throw AdminError(
-            AdminErrorCode::
-                cannot_disable_self,
+            AdminErrorCode::cannot_disable_self,
             "Administrator cannot disable "
             "their own account"
         );
     }
 
+    auto transaction =
+        database_.begin_transaction();
+
+    const std::optional<User> target =
+        user_repository_.find_by_id(
+            transaction,
+            target_user_id
+        );
+
+    if (!target.has_value()) {
+        throw AdminError(
+            AdminErrorCode::user_not_found,
+            "User does not exist"
+        );
+    }
+
     if (
         !user_repository_.set_enabled(
+            transaction,
             target_user_id,
             enabled
         )
     ) {
         throw AdminError(
-            AdminErrorCode::
-                user_not_found,
+            AdminErrorCode::user_not_found,
             "User does not exist"
         );
     }
@@ -189,24 +194,25 @@ AdminService::set_user_enabled(
         revoked_sessions =
             auth_session_repository_
                 .revoke_all_for_user(
+                    transaction,
                     target_user_id
                 );
     }
 
-    const std::optional<User>
-        updated_user =
-            user_repository_.find_by_id(
-                target_user_id
-            );
+    const std::optional<User> updated_user =
+        user_repository_.find_by_id(
+            transaction,
+            target_user_id
+        );
 
     if (!updated_user.has_value()) {
         throw AdminError(
-            AdminErrorCode::
-                user_not_found,
-            "Updated user could not "
-            "be found"
+            AdminErrorCode::user_not_found,
+            "Updated user could not be found"
         );
     }
+
+    transaction.commit();
 
     return UserStatusResult{
         *updated_user,

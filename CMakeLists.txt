@@ -91,6 +91,7 @@ set(
     src/http/middleware.cpp
 
     src/database/database.cpp
+    src/database/transaction.cpp
     src/database/migration.cpp
 
     src/repository/user_repository.cpp
@@ -305,6 +306,31 @@ if(BUILD_TESTING)
         NAME securecore-config-unit
         COMMAND
             securecore-config-test
+    )
+
+    add_executable(
+        securecore-transaction-test
+        tests/database_transaction_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-transaction-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-transaction-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-database-transaction-unit
+        COMMAND
+            securecore-transaction-test
     )
 
     add_test(
