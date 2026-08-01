@@ -50,6 +50,10 @@ int main() {
         std::chrono::microseconds{500}
     );
 
+    metrics.audit_event_recorded();
+    metrics.audit_event_recorded();
+    metrics.audit_event_failed();
+
     const auto snapshot =
         metrics.snapshot();
 
@@ -94,6 +98,16 @@ int main() {
         snapshot
             .http_connections_opened_total == 2,
         "opened connections"
+    );
+
+    require(
+        snapshot.audit_events_recorded_total == 2,
+        "audit events recorded"
+    );
+
+    require(
+        snapshot.audit_events_failed_total == 1,
+        "audit event failures"
     );
 
     std::cout

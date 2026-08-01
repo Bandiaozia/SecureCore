@@ -84,6 +84,12 @@ User AdminService::require_admin(
     return user;
 }
 
+User AdminService::authenticate_admin(
+    std::string_view access_token
+) {
+    return require_admin(access_token);
+}
+
 UserListResult AdminService::list_users(
     std::string_view access_token,
     std::int64_t limit,
@@ -215,6 +221,7 @@ AdminService::set_user_enabled(
     transaction.commit();
 
     return UserStatusResult{
+        administrator.id,
         *updated_user,
         revoked_sessions
     };

@@ -52,6 +52,9 @@ public:
     std::uint32_t
     shutdown_grace_period_ms() const noexcept;
 
+    std::uint32_t
+    audit_retention_days() const noexcept;
+
     bool tls_enabled() const noexcept;
 
     const std::string&
@@ -131,6 +134,8 @@ private:
 
     std::uint32_t
         shutdown_grace_period_ms_{10000};
+
+    std::uint32_t audit_retention_days_{90};
 
     bool tls_enabled_{false};
 

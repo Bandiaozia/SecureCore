@@ -124,6 +124,22 @@ void MetricsRegistry::connection_closed()
     }
 }
 
+void MetricsRegistry::audit_event_recorded()
+    noexcept {
+    audit_events_recorded_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
+void MetricsRegistry::audit_event_failed()
+    noexcept {
+    audit_events_failed_total_.fetch_add(
+        1,
+        std::memory_order_relaxed
+    );
+}
+
 MetricsSnapshot MetricsRegistry::snapshot()
     const noexcept {
     const auto uptime =
@@ -164,6 +180,12 @@ MetricsSnapshot MetricsRegistry::snapshot()
             std::memory_order_relaxed
         ),
         http_connections_opened_total_.load(
+            std::memory_order_relaxed
+        ),
+        audit_events_recorded_total_.load(
+            std::memory_order_relaxed
+        ),
+        audit_events_failed_total_.load(
             std::memory_order_relaxed
         )
     };

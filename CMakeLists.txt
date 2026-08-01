@@ -73,6 +73,8 @@ set(
 
     src/observability/metrics_registry.cpp
 
+    src/audit/request_audit_context.cpp
+
     src/config/server_config.cpp
 
     src/log/logger.cpp
@@ -86,6 +88,7 @@ set(
     src/http/routes.cpp
     src/http/admin_routes.cpp
     src/http/account_routes.cpp
+    src/http/audit_routes.cpp
     src/http/metrics_routes.cpp
     src/http/api_error.cpp
     src/http/json_utils.cpp
@@ -100,6 +103,7 @@ set(
 
     src/repository/user_repository.cpp
     src/repository/auth_session_repository.cpp
+    src/repository/audit_repository.cpp
 
     src/security/token_service.cpp
     src/security/password_hasher.cpp
@@ -108,6 +112,7 @@ set(
     src/service/auth_service.cpp
     src/service/admin_service.cpp
     src/service/account_security_service.cpp
+    src/service/audit_service.cpp
 )
 
 add_library(
@@ -440,6 +445,46 @@ if(BUILD_TESTING)
         securecore-api-validation-integration
         PROPERTIES
             TIMEOUT 30
+    )
+
+    add_executable(
+        securecore-audit-test
+        tests/audit_repository_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-audit-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-audit-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-audit-unit
+        COMMAND
+            securecore-audit-test
+    )
+
+    add_test(
+        NAME securecore-audit-integration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/audit_integration_test.py
+            $<TARGET_FILE:secure-server>
+            $<TARGET_FILE:secure-admin>
+    )
+
+    set_tests_properties(
+        securecore-audit-integration
+        PROPERTIES
+            TIMEOUT 40
     )
 
     add_test(

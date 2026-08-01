@@ -3,6 +3,7 @@
 #include "secure/model/user.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -63,6 +64,18 @@ struct LoginResult final {
     AuthTokenPair tokens;
 };
 
+struct LogoutResult final {
+    std::optional<std::int64_t> user_id;
+
+    bool revoked{false};
+};
+
+struct LogoutAllResult final {
+    std::int64_t user_id{0};
+
+    std::int64_t revoked_sessions{0};
+};
+
 class AuthService final {
 public:
     AuthService(
@@ -100,12 +113,13 @@ public:
      * 已失效或不存在的令牌返回 false，
      * 不抛出认证错误。
      */
-    bool logout_access_token(
+    [[nodiscard]]
+    LogoutResult logout_access_token(
         std::string_view access_token
     );
 
     [[nodiscard]]
-    std::int64_t logout_all_access_token(
+    LogoutAllResult logout_all_access_token(
         std::string_view access_token
     );
 

@@ -52,7 +52,15 @@ struct SessionListResult final {
     std::int64_t current_session_id{0};
 };
 
+struct SessionRevokeResult final {
+    std::int64_t user_id{0};
+
+    bool revoked{false};
+};
+
 struct PasswordChangeResult final {
+    std::int64_t user_id{0};
+
     std::int64_t revoked_sessions{0};
 };
 
@@ -73,7 +81,8 @@ public:
         std::string_view access_token
     );
 
-    void revoke_session(
+    [[nodiscard]]
+    SessionRevokeResult revoke_session(
         std::string_view access_token,
         std::int64_t session_id
     );

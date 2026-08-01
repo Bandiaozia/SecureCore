@@ -8,6 +8,7 @@
 #include "secure/model/auth_session.hpp"
 #include "secure/service/account_security_service.hpp"
 #include "secure/service/auth_service.hpp"
+#include "secure/service/audit_service.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -197,6 +198,7 @@ HttpResponse list_sessions_handler(
 
 HttpResponse revoke_session_handler(
     AccountSecurityService& account_security_service,
+    AuditService& audit_service,
     const HttpRequest& request,
     const RouteParameters& parameters
 ) {
@@ -214,9 +216,23 @@ HttpResponse revoke_session_handler(
         );
 
     try {
-        account_security_service.revoke_session(
-            *access_token,
-            session_id
+        const SessionRevokeResult result =
+            account_security_service.revoke_session(
+                *access_token,
+                session_id
+            );
+
+        audit_service.record(
+            AuditRecord{
+                result.user_id,
+                "account.session_revoke",
+                "success",
+                "authentication_session",
+                session_id,
+                Json{
+                    {"revoked", result.revoked}
+                }.dump()
+            }
         );
 
         HttpResponse response{
@@ -229,14 +245,46 @@ HttpResponse revoke_session_handler(
 
         return response;
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "account.session_revoke",
+                "failure",
+                "authentication_session",
+                session_id,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return auth_error_response(error);
     } catch (const AccountSecurityError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "account.session_revoke",
+                "failure",
+                "authentication_session",
+                session_id,
+                Json{
+                    {
+                        "reason",
+                        account_security_error_name(
+                            error.code()
+                        )
+                    }
+                }.dump()
+            }
+        );
+
         return account_error_response(error);
     }
 }
 
 HttpResponse change_password_handler(
     AccountSecurityService& account_security_service,
+    AuditService& audit_service,
     const HttpRequest& request
 ) {
     const auto access_token =
@@ -285,6 +333,22 @@ HttpResponse change_password_handler(
                 std::move(*new_password)
             );
 
+        audit_service.record(
+            AuditRecord{
+                result.user_id,
+                "account.password_change",
+                "success",
+                "user",
+                result.user_id,
+                Json{
+                    {
+                        "revoked_sessions",
+                        result.revoked_sessions
+                    }
+                }.dump()
+            }
+        );
+
         return make_json_response(
             http::status::ok,
             Json{
@@ -296,8 +360,39 @@ HttpResponse change_password_handler(
             }
         );
     } catch (const AuthError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "account.password_change",
+                "failure",
+                "user",
+                std::nullopt,
+                Json{
+                    {"reason", auth_error_name(error.code())}
+                }.dump()
+            }
+        );
+
         return auth_error_response(error);
     } catch (const AccountSecurityError& error) {
+        audit_service.record(
+            AuditRecord{
+                std::nullopt,
+                "account.password_change",
+                "failure",
+                "user",
+                std::nullopt,
+                Json{
+                    {
+                        "reason",
+                        account_security_error_name(
+                            error.code()
+                        )
+                    }
+                }.dump()
+            }
+        );
+
         return account_error_response(error);
     }
 }
@@ -306,7 +401,8 @@ HttpResponse change_password_handler(
 
 void register_account_routes(
     Router& router,
-    AccountSecurityService& account_security_service
+    AccountSecurityService& account_security_service,
+    AuditService& audit_service
 ) {
     router.get(
         "/v1/auth/sessions",
@@ -322,12 +418,13 @@ void register_account_routes(
 
     router.remove(
         "/v1/auth/sessions/{id}",
-        [&account_security_service](
+        [&account_security_service, &audit_service](
             const HttpRequest& request,
             const RouteParameters& parameters
         ) {
             return revoke_session_handler(
                 account_security_service,
+                audit_service,
                 request,
                 parameters
             );
@@ -336,11 +433,12 @@ void register_account_routes(
 
     router.post(
         "/v1/users/me/password",
-        [&account_security_service](
+        [&account_security_service, &audit_service](
             const HttpRequest& request
         ) {
             return change_password_handler(
                 account_security_service,
+                audit_service,
                 request
             );
         }

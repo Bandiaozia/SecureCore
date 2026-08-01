@@ -1,6 +1,7 @@
 #include "secure/runtime/server_application.hpp"
 
 #include "secure/http/admin_routes.hpp"
+#include "secure/http/audit_routes.hpp"
 #include "secure/http/account_routes.hpp"
 #include "secure/http/http_limits.hpp"
 #include "secure/http/metrics_routes.hpp"
@@ -225,8 +226,14 @@ ServerApplication::ServerApplication(
       migration_runner_(database_),
       user_repository_(database_),
       auth_session_repository_(database_),
+      audit_repository_(database_),
       password_hasher_(),
       token_service_(),
+      audit_service_(
+          audit_repository_,
+          logger_,
+          metrics_registry_
+      ),
       user_service_(
           user_repository_,
           password_hasher_
@@ -316,22 +323,51 @@ ServerApplication::ServerApplication(
         "Database initialized."
     );
 
+    try {
+        const std::int64_t expired_audit_events =
+            audit_service_.purge_expired(
+                config_.audit_retention_days()
+            );
+
+        logger_.info(
+            "Security audit retention: ",
+            config_.audit_retention_days(),
+            " days; removed ",
+            expired_audit_events,
+            " expired event(s)."
+        );
+    } catch (const std::exception& error) {
+        logger_.warning(
+            "Security audit retention cleanup failed: ",
+            error.what()
+        );
+    }
+
     register_routes(
         router_,
         database_,
         service_state_,
         user_service_,
-        auth_service_
+        auth_service_,
+        audit_service_
     );
 
     register_admin_routes(
         router_,
-        admin_service_
+        admin_service_,
+        audit_service_
     );
 
     register_account_routes(
         router_,
-        account_security_service_
+        account_security_service_,
+        audit_service_
+    );
+
+    register_audit_routes(
+        router_,
+        admin_service_,
+        audit_service_
     );
 
     register_metrics_routes(

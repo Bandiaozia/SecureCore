@@ -420,11 +420,11 @@ authenticate_access_token(
     return *user;
 }
 
-bool AuthService::logout_access_token(
+LogoutResult AuthService::logout_access_token(
     std::string_view access_token
 ) {
     if (access_token.empty()) {
-        return false;
+        return LogoutResult{};
     }
 
     const std::string token_hash =
@@ -443,16 +443,19 @@ bool AuthService::logout_access_token(
         !session.has_value() ||
         session->revoked
     ) {
-        return false;
+        return LogoutResult{};
     }
 
-    return auth_session_repository_
-        .revoke_by_id(
-            session->id
-        );
+    return LogoutResult{
+        session->user_id,
+        auth_session_repository_
+            .revoke_by_id(
+                session->id
+            )
+    };
 }
 
-std::int64_t
+LogoutAllResult
 AuthService::logout_all_access_token(
     std::string_view access_token
 ) {
@@ -465,10 +468,13 @@ AuthService::logout_all_access_token(
             access_token
         );
 
-    return auth_session_repository_
-        .revoke_all_for_user(
-            user.id
-        );
+    return LogoutAllResult{
+        user.id,
+        auth_session_repository_
+            .revoke_all_for_user(
+                user.id
+            )
+    };
 }
 
 AuthTokenPair AuthService::issue_tokens(

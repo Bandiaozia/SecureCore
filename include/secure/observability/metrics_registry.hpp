@@ -28,6 +28,12 @@ struct MetricsSnapshot final {
 
     std::uint64_t
         http_connections_opened_total{0};
+
+    std::uint64_t
+        audit_events_recorded_total{0};
+
+    std::uint64_t
+        audit_events_failed_total{0};
 };
 
 class MetricsRegistry final {
@@ -46,6 +52,10 @@ public:
     void connection_opened() noexcept;
 
     void connection_closed() noexcept;
+
+    void audit_event_recorded() noexcept;
+
+    void audit_event_failed() noexcept;
 
     [[nodiscard]]
     MetricsSnapshot snapshot()
@@ -81,6 +91,12 @@ private:
 
     std::atomic_uint64_t
         http_connections_opened_total_{0};
+
+    std::atomic_uint64_t
+        audit_events_recorded_total_{0};
+
+    std::atomic_uint64_t
+        audit_events_failed_total_{0};
 };
 
 }  // namespace secure

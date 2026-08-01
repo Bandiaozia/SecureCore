@@ -54,6 +54,8 @@ struct UserListResult final {
 };
 
 struct UserStatusResult final {
+    std::int64_t administrator_id{0};
+
     User user;
 
     std::int64_t revoked_sessions{0};
@@ -67,6 +69,11 @@ public:
         UserRepository& user_repository,
         AuthSessionRepository&
             auth_session_repository
+    );
+
+    [[nodiscard]]
+    User authenticate_admin(
+        std::string_view access_token
     );
 
     [[nodiscard]]

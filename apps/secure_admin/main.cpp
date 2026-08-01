@@ -1,7 +1,9 @@
 #include "secure/config/server_config.hpp"
 #include "secure/database/database.hpp"
 #include "secure/database/migration.hpp"
+#include "secure/model/audit_event.hpp"
 #include "secure/model/user.hpp"
+#include "secure/repository/audit_repository.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 
@@ -13,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
 
 namespace {
 
@@ -122,6 +125,10 @@ int main(
             auth_session_repository(
                 database
             );
+
+        secure::AuditRepository audit_repository(
+            database
+        );
 
         const std::optional<secure::User>
             user =
@@ -243,6 +250,35 @@ int main(
                 "Updated user could not "
                 "be read back"
             );
+        }
+
+        try {
+            static_cast<void>(
+                audit_repository.create(
+                    secure::CreateAuditEvent{
+                        std::nullopt,
+                        "admin.cli." + command,
+                        "success",
+                        "user",
+                        updated_user->id,
+                        "secure-admin",
+                        "local",
+                        "secure-admin",
+                        std::string("{\"changed\":") +
+                            (changed ? "true" : "false") +
+                            ",\"revoked_sessions\":" +
+                            std::to_string(revoked_sessions) +
+                            "}"
+                    }
+                )
+            );
+        } catch (const std::exception& error) {
+            std::cerr
+                << "Warning: administrator operation "
+                << "completed, but the audit event "
+                << "could not be stored: "
+                << error.what()
+                << '\n';
         }
 
         print_user(

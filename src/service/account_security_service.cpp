@@ -163,7 +163,8 @@ AccountSecurityService::list_sessions(
     };
 }
 
-void AccountSecurityService::revoke_session(
+SessionRevokeResult
+AccountSecurityService::revoke_session(
     std::string_view access_token,
     std::int64_t session_id
 ) {
@@ -188,15 +189,20 @@ void AccountSecurityService::revoke_session(
         );
     }
 
+    bool revoked = false;
+
     if (!target->revoked) {
-        static_cast<void>(
-            auth_session_repository_
-                .revoke_by_id_for_user(
-                    session_id,
-                    current.user.id
-                )
-        );
+        revoked = auth_session_repository_
+            .revoke_by_id_for_user(
+                session_id,
+                current.user.id
+            );
     }
+
+    return SessionRevokeResult{
+        current.user.id,
+        revoked
+    };
 }
 
 PasswordChangeResult
@@ -278,6 +284,7 @@ AccountSecurityService::change_password(
     transaction.commit();
 
     return PasswordChangeResult{
+        current.user.id,
         revoked_sessions
     };
 }

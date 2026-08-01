@@ -1,5 +1,6 @@
 #include "secure/http/middleware.hpp"
 
+#include "secure/audit/request_audit_context.hpp"
 #include "secure/http/api_error.hpp"
 #include "secure/http/json_utils.hpp"
 #include "secure/http/request_id.hpp"
@@ -202,6 +203,35 @@ void register_default_middlewares(
                 resolve_request_id(
                     context.request
                 );
+
+            std::string user_agent;
+
+            const auto user_agent_iterator =
+                context.request.find(
+                    http::field::user_agent
+                );
+
+            if (
+                user_agent_iterator !=
+                context.request.end()
+            ) {
+                const auto value =
+                    user_agent_iterator->value();
+
+                user_agent.assign(
+                    value.data(),
+                    value.size()
+                );
+            }
+
+            ScopedRequestAuditContext
+                audit_context{
+                    RequestAuditContext{
+                        request_id,
+                        context.client_ip,
+                        std::move(user_agent)
+                    }
+                };
 
             const auto started_at =
                 std::chrono::steady_clock::now();
