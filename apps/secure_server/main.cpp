@@ -19,6 +19,8 @@ int main(int argc, char* argv[]) {
                 config_path
             );
 
+        config.validate_for_server();
+
         secure::ServerApplication application(
             std::move(config)
         );

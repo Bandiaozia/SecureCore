@@ -1,0 +1,32 @@
+# SecureCore production configuration example
+# Copy this file to configs/server.production.conf.
+# The copied file is ignored by Git.
+
+environment=production
+
+# Direct public deployment should enable TLS.
+listen_address=0.0.0.0
+listen_port=9443
+
+log_file=logs/securecore-production.log
+database_path=data/securecore-production.db
+
+io_threads=4
+worker_threads=4
+worker_queue_capacity=512
+
+tls_enabled=true
+tls_certificate_file=certs/fullchain.pem
+tls_private_key_file=certs/private-key.pem
+tls_handshake_timeout_seconds=10
+
+http_max_connections=4096
+http_rate_limit_requests=100
+http_rate_limit_window_seconds=1
+
+http_max_header_bytes=16384
+http_max_body_bytes=1048576
+
+http_read_timeout_seconds=10
+http_write_timeout_seconds=10
+http_idle_timeout_seconds=30

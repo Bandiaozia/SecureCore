@@ -6,3 +6,15 @@
 
 /logs/
 /data/
+
+# Local and production configuration overrides
+.env
+.env.*
+!.env.example
+/configs/server.local.conf
+/configs/server.production.conf
+
+# TLS material must never be committed
+/certs/
+*.key
+*.pem

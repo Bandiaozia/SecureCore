@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import http.client
 import json
+import os
 import signal
 import socket
 import subprocess
@@ -71,6 +72,7 @@ class SecureCoreHttpTests(unittest.TestCase):
         config_path.write_text(
             "\n".join(
                 [
+                    "environment=test",
                     f"listen_address={HOST}",
                     f"listen_port={cls.port}",
                     f"log_file={log_path}",
@@ -95,6 +97,12 @@ class SecureCoreHttpTests(unittest.TestCase):
             encoding="utf-8"
         )
 
+        server_environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("SECURECORE_")
+        }
+
         cls.process = subprocess.Popen(
             [
                 str(server_path),
@@ -104,6 +112,7 @@ class SecureCoreHttpTests(unittest.TestCase):
             stdout=cls.output_file,
             stderr=subprocess.STDOUT,
             text=True,
+            env=server_environment,
         )
 
         cls.wait_until_ready()

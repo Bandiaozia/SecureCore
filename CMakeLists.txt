@@ -281,6 +281,32 @@ if(BUILD_TESTING)
     )
 
 
+
+    add_executable(
+        securecore-config-test
+        tests/server_config_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-config-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-config-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-config-unit
+        COMMAND
+            securecore-config-test
+    )
+
     add_test(
         NAME securecore-https-smoke
         COMMAND

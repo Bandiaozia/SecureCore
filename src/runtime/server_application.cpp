@@ -179,9 +179,7 @@ make_tls_context(
 
     if (error) {
         throw std::runtime_error(
-            "Failed to load TLS private key '" +
-            config.tls_private_key_file() +
-            "': " +
+            "Failed to load TLS private key: " +
             error.message()
         );
     }
@@ -302,9 +300,7 @@ ServerApplication::ServerApplication(
     migration_runner_.apply();
 
     logger_.info(
-        "Database initialized at ",
-        database_.path().string(),
-        '.'
+        "Database initialized."
     );
 
     register_routes(
@@ -363,6 +359,12 @@ int ServerApplication::run() {
     );
 
     logger_.info(
+        "Configuration: ",
+        config_.redacted_summary(),
+        '.'
+    );
+
+    logger_.info(
         "Starting I/O thread pool with ",
         config_.io_threads(),
         " threads."
@@ -379,9 +381,7 @@ int ServerApplication::run() {
     if (config_.tls_enabled()) {
         logger_.info(
             "TLS enabled. Minimum protocol "
-            "version: TLS 1.2. Certificate: ",
-            config_.tls_certificate_file(),
-            '.'
+            "version: TLS 1.2."
         );
     } else {
         logger_.warning(
@@ -398,12 +398,6 @@ int ServerApplication::run() {
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
-    );
-
-    logger_.info(
-        "Database path: ",
-        config_.database_path(),
-        '.'
     );
 
     logger_.info(
