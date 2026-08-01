@@ -57,6 +57,10 @@ ServerApplication::ServerApplication(
           password_hasher_,
           token_service_
       ),
+      worker_pool_(
+          config_.worker_threads(),
+          config_.worker_queue_capacity()
+      ),
       signals_(
           io_context_,
           SIGINT,
@@ -69,6 +73,7 @@ ServerApplication::ServerApplication(
           logger_,
           router_,
           middleware_pipeline_,
+          worker_pool_,
           HttpLimits{
               config_
                   .http_max_header_bytes(),
@@ -155,6 +160,14 @@ int ServerApplication::run() {
         "Starting I/O thread pool with ",
         config_.io_threads(),
         " threads."
+    );
+
+    logger_.info(
+        "Worker pool: ",
+        config_.worker_threads(),
+        " threads, queue capacity ",
+        config_.worker_queue_capacity(),
+        '.'
     );
 
     logger_.info(
@@ -249,7 +262,13 @@ void ServerApplication::stop() {
         return;
     }
 
+    /*
+     * 先停止接收连接，再停止接收新的后台任务。
+     * WorkerPool 会处理完已经进入队列的任务后退出。
+     */
     http_server_.stop();
+
+    worker_pool_.stop();
 }
 
 }  // namespace secure

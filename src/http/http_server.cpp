@@ -5,6 +5,7 @@
 #include "secure/http/middleware.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/runtime/worker_pool.hpp"
 
 #include <cstddef>
 #include <memory>
@@ -28,11 +29,13 @@ HttpServer::HttpServer(
     Logger& logger,
     Router& router,
     MiddlewarePipeline& middleware_pipeline,
+    WorkerPool& worker_pool,
     HttpLimits limits
 )
     : logger_(logger),
       router_(router),
       middleware_pipeline_(middleware_pipeline),
+      worker_pool_(worker_pool),
       limits_(std::move(limits)),
       connection_manager_(
           limits_.max_connections
@@ -263,6 +266,7 @@ void HttpServer::do_accept() {
                                 logger_,
                                 router_,
                                 middleware_pipeline_,
+                                worker_pool_,
                                 limits_
                             );
 

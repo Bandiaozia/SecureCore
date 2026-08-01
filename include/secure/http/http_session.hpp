@@ -24,6 +24,7 @@ class ConnectionManager;
 class Logger;
 class MiddlewarePipeline;
 class Router;
+class WorkerPool;
 
 class HttpSession final
     : public Connection,
@@ -37,6 +38,7 @@ public:
         Logger& logger,
         Router& router,
         MiddlewarePipeline& middleware_pipeline,
+        WorkerPool& worker_pool,
         const HttpLimits& limits
     );
 
@@ -61,6 +63,10 @@ private:
     );
 
     void handle_request();
+
+    void complete_request(
+        HttpResponse response
+    );
 
     void send_response(
         HttpResponse response
@@ -88,6 +94,8 @@ private:
     Router& router_;
 
     MiddlewarePipeline& middleware_pipeline_;
+
+    WorkerPool& worker_pool_;
 
     HttpLimits limits_;
 

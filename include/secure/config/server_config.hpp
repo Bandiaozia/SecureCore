@@ -27,6 +27,12 @@ public:
     io_threads() const noexcept;
 
     std::uint32_t
+    worker_threads() const noexcept;
+
+    std::uint32_t
+    worker_queue_capacity() const noexcept;
+
+    std::uint32_t
     http_max_connections() const noexcept;
 
     std::uint32_t
@@ -66,6 +72,11 @@ private:
     };
 
     std::uint32_t io_threads_{4};
+
+    std::uint32_t worker_threads_{4};
+
+    std::uint32_t
+        worker_queue_capacity_{256};
 
     std::uint32_t
         http_max_connections_{1024};
