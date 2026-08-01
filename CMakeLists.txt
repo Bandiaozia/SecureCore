@@ -25,6 +25,10 @@ set(
     ON
 )
 
+include(
+    cmake/SecurityTesting.cmake
+)
+
 find_package(
     Boost
     REQUIRED
@@ -611,6 +615,31 @@ if(BUILD_TESTING)
             TIMEOUT 40
     )
 
+    add_executable(
+        securecore-security-parser-corpus-test
+        tests/security_parser_corpus_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-security-parser-corpus-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-security-parser-corpus-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-security-parser-corpus
+        COMMAND
+            securecore-security-parser-corpus-test
+    )
+
     add_test(
         NAME securecore-https-smoke
         COMMAND
@@ -626,4 +655,8 @@ if(BUILD_TESTING)
             TIMEOUT 30
     )
 
+endif()
+
+if(SECURECORE_BUILD_FUZZERS)
+    add_subdirectory(fuzz)
 endif()
