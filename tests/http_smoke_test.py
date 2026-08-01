@@ -771,38 +771,69 @@ class SecureCoreHttpTests(unittest.TestCase):
                             sock
                         )
 
-                    time.sleep(0.1)
-
-                    # 第三个连接应被服务器直接拒绝。
-                    with socket.create_connection(
-                        (HOST, port),
-                        timeout=3,
-                    ) as third:
-                        third.settimeout(3)
-
-                        third.sendall(
-                            b"GET /health HTTP/1.1\r\n"
-                            b"Host: 127.0.0.1\r\n"
-                            b"Connection: close\r\n"
-                            b"\r\n"
-                        )
-
-                        chunks: list[bytes] = []
-
-                        while True:
-                            chunk = third.recv(4096)
-
-                            if not chunk:
-                                break
-
-                            chunks.append(chunk)
-
-                    raw_response = (
-                        b"".join(chunks).decode(
-                            "utf-8",
-                            errors="replace",
-                        )
+                    # connect() 成功只表示套接字已经进入内核的
+                    # accept 队列，并不表示服务器工作线程已经接管它。
+                    # Sanitizer 构建明显更慢，因此不能依赖固定 sleep。
+                    rejection_deadline = (
+                        time.monotonic() + 5
                     )
+                    raw_response = ""
+
+                    while (
+                        time.monotonic() <
+                        rejection_deadline
+                    ):
+                        try:
+                            with socket.create_connection(
+                                (HOST, port),
+                                timeout=3,
+                            ) as third:
+                                third.settimeout(3)
+
+                                third.sendall(
+                                    b"GET /health HTTP/1.1\r\n"
+                                    b"Host: 127.0.0.1\r\n"
+                                    b"Connection: close\r\n"
+                                    b"\r\n"
+                                )
+
+                                chunks: list[bytes] = []
+
+                                while True:
+                                    chunk = third.recv(
+                                        4096
+                                    )
+
+                                    if not chunk:
+                                        break
+
+                                    chunks.append(chunk)
+
+                            raw_response = (
+                                b"".join(chunks).decode(
+                                    "utf-8",
+                                    errors="replace",
+                                )
+                            )
+                        except OSError as error:
+                            raw_response = (
+                                "Connection-limit probe "
+                                f"failed: {error}"
+                            )
+
+                        if raw_response.startswith(
+                            "HTTP/1.1 503"
+                        ):
+                            break
+
+                        time.sleep(0.05)
+                    else:
+                        self.fail(
+                            "Connection limit was not "
+                            "observed before the deadline. "
+                            "Last response:\n"
+                            + raw_response
+                        )
 
                     self.assertTrue(
                         raw_response.startswith(
