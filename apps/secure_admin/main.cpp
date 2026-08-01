@@ -102,6 +102,8 @@ int main(
                     config_path
                 );
 
+        config.validate_for_admin();
+
         secure::Database database(
             config.database_path()
         );

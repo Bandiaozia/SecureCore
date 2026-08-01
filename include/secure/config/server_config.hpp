@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace secure {
 
@@ -10,6 +11,15 @@ public:
     static ServerConfig load_from_file(
         const std::string& path
     );
+
+    void validate_for_server() const;
+
+    void validate_for_admin() const;
+
+    std::string redacted_summary() const;
+
+    const std::string&
+    environment() const noexcept;
 
     const std::string&
     listen_address() const noexcept;
@@ -69,6 +79,20 @@ public:
     http_idle_timeout_seconds() const noexcept;
 
 private:
+    void apply_setting(
+        std::string_view key,
+        const std::string& value,
+        std::string_view source
+    );
+
+    void apply_environment_overrides();
+
+    void validate_common() const;
+
+    std::string environment_{
+        "development"
+    };
+
     std::string listen_address_{
         "0.0.0.0"
     };
