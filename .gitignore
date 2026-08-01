@@ -18,3 +18,7 @@
 /certs/
 *.key
 *.pem
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
