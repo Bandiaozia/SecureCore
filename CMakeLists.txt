@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(
     SecureCore
+    VERSION 0.1.0
     LANGUAGES CXX
 )
 
@@ -28,6 +29,12 @@ set(
 include(
     cmake/SecurityTesting.cmake
 )
+
+include(
+    cmake/Version.cmake
+)
+
+securecore_configure_version()
 
 find_package(
     Boost
@@ -134,6 +141,7 @@ target_include_directories(
     securecore
     PUBLIC
         include
+        "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
 target_link_libraries(
@@ -638,6 +646,21 @@ if(BUILD_TESTING)
         NAME securecore-security-parser-corpus
         COMMAND
             securecore-security-parser-corpus-test
+    )
+
+    add_test(
+        NAME securecore-version-cli
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_cli_test.py
+            $<TARGET_FILE:secure-server>
+            $<TARGET_FILE:secure-admin>
+    )
+
+    set_tests_properties(
+        securecore-version-cli
+        PROPERTIES
+            TIMEOUT 20
     )
 
     add_test(

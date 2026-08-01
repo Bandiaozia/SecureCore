@@ -1,0 +1,129 @@
+name: Security tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  asan-ubsan:
+    name: ASan and UBSan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: scripts/ci/install-dependencies.sh
+
+      - name: Run ASan and UBSan
+        env:
+          SECURECORE_SANITIZER_MODE: asan-ubsan
+        run: scripts/run-sanitizers.sh
+
+      - name: Upload sanitizer failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: asan-ubsan-failure
+          path: |
+            build-asan-ubsan/Testing/Temporary/
+            build-asan-ubsan/CMakeCache.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: scripts/ci/install-dependencies.sh
+
+      - name: Run focused TSan tests
+        env:
+          SECURECORE_SANITIZER_MODE: tsan
+          SECURECORE_REQUIRE_TSAN: "1"
+        run: scripts/run-sanitizers.sh
+
+      - name: Upload TSan failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: tsan-failure
+          path: |
+            build-tsan/Testing/Temporary/
+            build-tsan-clang/Testing/Temporary/
+            build-tsan/CMakeCache.txt
+            build-tsan-clang/CMakeCache.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  fuzz-smoke:
+    name: libFuzzer smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: scripts/ci/install-dependencies.sh
+
+      - name: Run all fuzz targets
+        env:
+          SECURECORE_FUZZ_SECONDS: "15"
+        run: |
+          set -o pipefail
+          scripts/run-fuzz-smoke.sh 2>&1 | tee fuzz-smoke.log
+
+      - name: Upload fuzz failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: fuzz-failure
+          path: |
+            fuzz-smoke.log
+            build-fuzz/artifacts/
+            build-fuzz/smoke-corpus/
+          if-no-files-found: ignore
+          retention-days: 14

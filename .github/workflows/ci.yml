@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: scripts/ci/install-dependencies.sh
+
+      - name: Validate repository
+        run: scripts/ci/check-repository.sh
+
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC Debug
+            compiler: g++
+            build_type: Debug
+            build_dir: build-ci-gcc-debug
+            cache_key: gcc-debug
+          - name: Clang Debug
+            compiler: clang++
+            build_type: Debug
+            build_dir: build-ci-clang-debug
+            cache_key: clang-debug
+          - name: GCC Release
+            compiler: g++
+            build_type: Release
+            build_dir: build-ci-gcc-release
+            cache_key: gcc-release
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: scripts/ci/install-dependencies.sh
+
+      - name: Restore compiler cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.cache/ccache
+          key: >-
+            ${{ runner.os }}-${{ matrix.cache_key }}-
+            ${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'apps/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.cache_key }}-
+
+      - name: Build and test
+        run: >-
+          scripts/ci/build-and-test.sh
+          "${{ matrix.compiler }}"
+          "${{ matrix.build_type }}"
+          "${{ matrix.build_dir }}"
+
+      - name: Upload CTest failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ctest-logs-${{ matrix.cache_key }}
+          path: |
+            ${{ matrix.build_dir }}/Testing/Temporary/
+            ${{ matrix.build_dir }}/CMakeCache.txt
+          if-no-files-found: ignore
+          retention-days: 14

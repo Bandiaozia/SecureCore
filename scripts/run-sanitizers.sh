@@ -8,6 +8,7 @@ JOBS="${SECURECORE_BUILD_JOBS:-$(nproc)}"
 TSAN_TEST_REGEX='securecore-(worker-pool-unit|metrics-unit|database-pool-unit|graceful-shutdown-unit|auth-abuse-unit|security-parser-corpus)'
 TSAN_OPTIONS_VALUE="${TSAN_OPTIONS:-halt_on_error=1:second_deadlock_stack=1:history_size=7}"
 REQUIRE_TSAN="${SECURECORE_REQUIRE_TSAN:-0}"
+SANITIZER_MODE="${SECURECORE_SANITIZER_MODE:-all}"
 
 temporary_files=()
 
@@ -287,8 +288,22 @@ run_tsan() {
     handle_tsan_unavailable "$output"
 }
 
-run_asan_ubsan
-run_tsan
+case "$SANITIZER_MODE" in
+    all)
+        run_asan_ubsan
+        run_tsan
+        ;;
+    asan-ubsan)
+        run_asan_ubsan
+        ;;
+    tsan)
+        run_tsan
+        ;;
+    *)
+        echo "SECURECORE_SANITIZER_MODE must be all, asan-ubsan, or tsan." >&2
+        exit 2
+        ;;
+esac
 
 echo
-echo "Sanitizer pipeline completed."
+echo "Sanitizer pipeline completed: $SANITIZER_MODE."
