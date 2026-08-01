@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace secure {
 
@@ -45,6 +46,31 @@ public:
     std::optional<AuthSession>
     find_by_refresh_token_hash(
         std::string_view token_hash
+    );
+
+    [[nodiscard]]
+    std::vector<AuthSession>
+    list_active_for_user(
+        std::int64_t user_id,
+        std::int64_t current_time
+    );
+
+    [[nodiscard]]
+    std::optional<AuthSession>
+    find_by_id_for_user(
+        std::int64_t session_id,
+        std::int64_t user_id
+    );
+
+    bool revoke_by_id_for_user(
+        std::int64_t session_id,
+        std::int64_t user_id
+    );
+
+    std::int64_t
+    revoke_all_except_for_user(
+        std::int64_t user_id,
+        std::int64_t excluded_session_id
     );
 
     bool revoke_by_id(

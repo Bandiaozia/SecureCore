@@ -649,6 +649,68 @@ WHERE
     );
 }
 
+bool UserRepository::set_password_hash(
+    std::int64_t user_id,
+    std::string_view password_hash
+) {
+    if (
+        user_id <= 0 ||
+        password_hash.empty()
+    ) {
+        return false;
+    }
+
+    return database_.with_locked_handle(
+        [
+            user_id,
+            password_hash
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+UPDATE users
+SET
+    password_hash = ?1,
+    updated_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE id = ?2;
+)SQL"
+            };
+
+            statement.bind_text(
+                1,
+                password_hash
+            );
+
+            statement.bind_int64(
+                2,
+                user_id
+            );
+
+            const int result =
+                statement.step();
+
+            if (result != SQLITE_DONE) {
+                throw UserRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Updating user password",
+                        result
+                    )
+                );
+            }
+
+            return (
+                sqlite3_changes(handle) > 0
+            );
+        }
+    );
+}
+
 bool UserRepository::set_role(
     std::int64_t user_id,
     std::string_view role

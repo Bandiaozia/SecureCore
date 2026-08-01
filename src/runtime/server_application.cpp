@@ -1,6 +1,7 @@
 #include "secure/runtime/server_application.hpp"
 
 #include "secure/http/admin_routes.hpp"
+#include "secure/http/account_routes.hpp"
 #include "secure/http/http_limits.hpp"
 #include "secure/http/routes.hpp"
 
@@ -48,6 +49,13 @@ ServerApplication::ServerApplication(
           auth_service_,
           user_repository_,
           auth_session_repository_
+      ),
+      account_security_service_(
+          auth_service_,
+          user_repository_,
+          auth_session_repository_,
+          password_hasher_,
+          token_service_
       ),
       signals_(
           io_context_,
@@ -105,6 +113,11 @@ ServerApplication::ServerApplication(
     register_admin_routes(
         router_,
         admin_service_
+    );
+
+    register_account_routes(
+        router_,
+        account_security_service_
     );
 
     register_default_middlewares(

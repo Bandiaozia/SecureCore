@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sqlite3.h>
 
@@ -510,6 +511,280 @@ LIMIT 1;
             return read_optional_session(
                 handle,
                 statement
+            );
+        }
+    );
+}
+
+std::vector<AuthSession>
+AuthSessionRepository::
+list_active_for_user(
+    std::int64_t user_id,
+    std::int64_t current_time
+) {
+    if (user_id <= 0) {
+        return {};
+    }
+
+    return database_.with_locked_handle(
+        [
+            user_id,
+            current_time
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+SELECT
+    id,
+    user_id,
+    access_token_hash,
+    refresh_token_hash,
+    access_expires_at,
+    refresh_expires_at,
+    revoked,
+    created_at,
+    revoked_at
+FROM auth_sessions
+WHERE
+    user_id = ?1
+    AND revoked = 0
+    AND refresh_expires_at > ?2
+ORDER BY id DESC;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                user_id
+            );
+
+            statement.bind_int64(
+                2,
+                current_time
+            );
+
+            std::vector<AuthSession>
+                sessions;
+
+            while (true) {
+                const int result =
+                    statement.step();
+
+                if (result == SQLITE_ROW) {
+                    sessions.push_back(
+                        read_session(statement)
+                    );
+
+                    continue;
+                }
+
+                if (result == SQLITE_DONE) {
+                    break;
+                }
+
+                throw AuthSessionRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Listing user sessions",
+                        result
+                    )
+                );
+            }
+
+            return sessions;
+        }
+    );
+}
+
+std::optional<AuthSession>
+AuthSessionRepository::
+find_by_id_for_user(
+    std::int64_t session_id,
+    std::int64_t user_id
+) {
+    if (
+        session_id <= 0 ||
+        user_id <= 0
+    ) {
+        return std::nullopt;
+    }
+
+    return database_.with_locked_handle(
+        [
+            session_id,
+            user_id
+        ](
+            sqlite3* handle
+        ) -> std::optional<AuthSession> {
+            Statement statement{
+                handle,
+                R"SQL(
+SELECT
+    id,
+    user_id,
+    access_token_hash,
+    refresh_token_hash,
+    access_expires_at,
+    refresh_expires_at,
+    revoked,
+    created_at,
+    revoked_at
+FROM auth_sessions
+WHERE
+    id = ?1
+    AND user_id = ?2
+LIMIT 1;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                session_id
+            );
+
+            statement.bind_int64(
+                2,
+                user_id
+            );
+
+            return read_optional_session(
+                handle,
+                statement
+            );
+        }
+    );
+}
+
+bool AuthSessionRepository::
+revoke_by_id_for_user(
+    std::int64_t session_id,
+    std::int64_t user_id
+) {
+    if (
+        session_id <= 0 ||
+        user_id <= 0
+    ) {
+        return false;
+    }
+
+    return database_.with_locked_handle(
+        [
+            session_id,
+            user_id
+        ](
+            sqlite3* handle
+        ) {
+            Statement statement{
+                handle,
+                R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE
+    id = ?1
+    AND user_id = ?2
+    AND revoked = 0;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                session_id
+            );
+
+            statement.bind_int64(
+                2,
+                user_id
+            );
+
+            const int result =
+                statement.step();
+
+            if (result != SQLITE_DONE) {
+                throw AuthSessionRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Revoking user session",
+                        result
+                    )
+                );
+            }
+
+            return (
+                sqlite3_changes(handle) > 0
+            );
+        }
+    );
+}
+
+std::int64_t
+AuthSessionRepository::
+revoke_all_except_for_user(
+    std::int64_t user_id,
+    std::int64_t excluded_session_id
+) {
+    if (
+        user_id <= 0 ||
+        excluded_session_id <= 0
+    ) {
+        return 0;
+    }
+
+    return database_.with_locked_handle(
+        [
+            user_id,
+            excluded_session_id
+        ](
+            sqlite3* handle
+        ) -> std::int64_t {
+            Statement statement{
+                handle,
+                R"SQL(
+UPDATE auth_sessions
+SET
+    revoked = 1,
+    revoked_at = strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now'
+    )
+WHERE
+    user_id = ?1
+    AND id != ?2
+    AND revoked = 0;
+)SQL"
+            };
+
+            statement.bind_int64(
+                1,
+                user_id
+            );
+
+            statement.bind_int64(
+                2,
+                excluded_session_id
+            );
+
+            const int result =
+                statement.step();
+
+            if (result != SQLITE_DONE) {
+                throw AuthSessionRepositoryError(
+                    make_sqlite_error(
+                        handle,
+                        "Revoking other user sessions",
+                        result
+                    )
+                );
+            }
+
+            return sqlite3_changes64(
+                handle
             );
         }
     );
