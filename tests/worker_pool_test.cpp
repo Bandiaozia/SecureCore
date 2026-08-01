@@ -32,7 +32,6 @@ int main() {
     );
 
     std::promise<void> first_started;
-
     std::promise<void> release_first;
 
     std::shared_future<void> release_signal =
@@ -50,9 +49,7 @@ int main() {
                 &executed
             ] {
                 first_started.set_value();
-
                 release_signal.wait();
-
                 ++executed;
             }
         );
@@ -82,6 +79,19 @@ int main() {
         "second task must enter queue"
     );
 
+    const auto busy_snapshot =
+        pool.snapshot();
+
+    require(
+        busy_snapshot.active_tasks == 1,
+        "one task must be active"
+    );
+
+    require(
+        busy_snapshot.queued_tasks == 1,
+        "one task must be queued"
+    );
+
     const auto third =
         pool.try_submit(
             [] {
@@ -92,17 +102,34 @@ int main() {
         third ==
             secure::WorkerPool::
                 SubmitResult::queue_full,
-        "third task must be rejected "
-        "when queue is full"
+        "third task must be rejected"
+    );
+
+    require(
+        pool.snapshot().rejected_tasks == 1,
+        "queue rejection metric"
     );
 
     release_first.set_value();
-
     pool.stop();
 
     require(
         executed.load() == 2,
         "stop must drain accepted tasks"
+    );
+
+    const auto drained =
+        pool.snapshot();
+
+    require(
+        drained.active_tasks == 0 &&
+        drained.queued_tasks == 0,
+        "pool must be idle after stop"
+    );
+
+    require(
+        drained.completed_tasks == 2,
+        "completed task metric"
     );
 
     const auto after_stop =
@@ -116,6 +143,11 @@ int main() {
             secure::WorkerPool::
                 SubmitResult::stopped,
         "submission after stop must fail"
+    );
+
+    require(
+        pool.snapshot().rejected_tasks == 2,
+        "stopped rejection metric"
     );
 
     std::cout

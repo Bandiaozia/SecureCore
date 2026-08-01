@@ -3,6 +3,7 @@
 #include "secure/http/admin_routes.hpp"
 #include "secure/http/account_routes.hpp"
 #include "secure/http/http_limits.hpp"
+#include "secure/http/metrics_routes.hpp"
 #include "secure/http/routes.hpp"
 
 #include <chrono>
@@ -74,6 +75,7 @@ ServerApplication::ServerApplication(
           router_,
           middleware_pipeline_,
           worker_pool_,
+          metrics_registry_,
           HttpLimits{
               config_
                   .http_max_header_bytes(),
@@ -125,10 +127,17 @@ ServerApplication::ServerApplication(
         account_security_service_
     );
 
+    register_metrics_routes(
+        router_,
+        metrics_registry_,
+        worker_pool_
+    );
+
     register_default_middlewares(
         middleware_pipeline_,
         rate_limiter_,
-        logger_
+        logger_,
+        metrics_registry_
     );
 
     signals_.async_wait(

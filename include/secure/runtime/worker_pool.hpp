@@ -1,7 +1,9 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -9,6 +11,20 @@
 #include <vector>
 
 namespace secure {
+
+struct WorkerPoolSnapshot final {
+    std::size_t thread_count{0};
+
+    std::size_t queue_capacity{0};
+
+    std::uint64_t queued_tasks{0};
+
+    std::uint64_t active_tasks{0};
+
+    std::uint64_t completed_tasks{0};
+
+    std::uint64_t rejected_tasks{0};
+};
 
 class WorkerPool final {
 public:
@@ -38,12 +54,6 @@ public:
         Task task
     );
 
-    /*
-     * 停止接收新任务，处理完队列中已有任务，
-     * 然后等待全部工作线程退出。
-     *
-     * 该函数可以安全地重复调用。
-     */
     void stop() noexcept;
 
     [[nodiscard]]
@@ -52,6 +62,10 @@ public:
 
     [[nodiscard]]
     std::size_t queue_capacity()
+        const noexcept;
+
+    [[nodiscard]]
+    WorkerPoolSnapshot snapshot()
         const noexcept;
 
 private:
@@ -73,10 +87,15 @@ private:
 
     bool stopping_{false};
 
-    /*
-     * 防止多个线程同时执行 join。
-     */
     std::mutex stop_mutex_;
+
+    std::atomic_uint64_t queued_tasks_{0};
+
+    std::atomic_uint64_t active_tasks_{0};
+
+    std::atomic_uint64_t completed_tasks_{0};
+
+    std::atomic_uint64_t rejected_tasks_{0};
 };
 
 }  // namespace secure

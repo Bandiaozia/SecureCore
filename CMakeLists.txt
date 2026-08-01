@@ -65,6 +65,8 @@ set(
     src/runtime/server_application.cpp
     src/runtime/worker_pool.cpp
 
+    src/observability/metrics_registry.cpp
+
     src/config/server_config.cpp
 
     src/log/logger.cpp
@@ -77,6 +79,7 @@ set(
     src/http/routes.cpp
     src/http/admin_routes.cpp
     src/http/account_routes.cpp
+    src/http/metrics_routes.cpp
     src/http/json_utils.cpp
     src/http/rate_limiter.cpp
     src/http/middleware.cpp
@@ -235,6 +238,32 @@ if(BUILD_TESTING)
         NAME securecore-worker-pool-unit
         COMMAND
             securecore-worker-pool-test
+    )
+
+
+    add_executable(
+        securecore-metrics-test
+        tests/metrics_registry_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-metrics-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-metrics-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-metrics-unit
+        COMMAND
+            securecore-metrics-test
     )
 
 endif()

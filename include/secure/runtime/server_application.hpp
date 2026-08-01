@@ -8,6 +8,7 @@
 #include "secure/http/rate_limiter.hpp"
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/observability/metrics_registry.hpp"
 #include "secure/repository/auth_session_repository.hpp"
 #include "secure/repository/user_repository.hpp"
 #include "secure/runtime/worker_pool.hpp"
@@ -41,6 +42,8 @@ private:
     ServerConfig config_;
 
     Logger logger_;
+
+    MetricsRegistry metrics_registry_;
 
     Router router_;
 

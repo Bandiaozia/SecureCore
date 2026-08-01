@@ -3,6 +3,7 @@
 #include "secure/http/json_utils.hpp"
 #include "secure/http/rate_limiter.hpp"
 #include "secure/log/logger.hpp"
+#include "secure/observability/metrics_registry.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -275,7 +276,8 @@ HttpResponse MiddlewarePipeline::invoke(
 void register_default_middlewares(
     MiddlewarePipeline& pipeline,
     RateLimiter& rate_limiter,
-    Logger& logger
+    Logger& logger,
+    MetricsRegistry& metrics_registry
 ) {
     /*
      * 请求 ID 与访问日志。
@@ -284,7 +286,10 @@ void register_default_middlewares(
      * 都能获得 X-Request-ID。
      */
     pipeline.use(
-        [&logger](
+        [
+            &logger,
+            &metrics_registry
+        ](
             const RequestContext& context,
             const MiddlewarePipeline::Next& next
         ) {
@@ -300,11 +305,16 @@ void register_default_middlewares(
 
             const auto elapsed =
                 std::chrono::duration_cast<
-                    std::chrono::milliseconds
+                    std::chrono::microseconds
                 >(
                     std::chrono::steady_clock::now()
                     - started_at
                 );
+
+            metrics_registry.record_http_response(
+                response.result_int(),
+                elapsed
+            );
 
             response.set(
                 "X-Request-ID",
@@ -321,7 +331,7 @@ void register_default_middlewares(
                 " -> ",
                 response.result_int(),
                 " in ",
-                elapsed.count(),
+                elapsed.count() / 1000.0,
                 "ms, request_id=",
                 request_id,
                 '.'
