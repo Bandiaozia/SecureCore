@@ -22,6 +22,22 @@ tls_certificate_file=certs/fullchain.pem
 tls_private_key_file=certs/private-key.pem
 tls_handshake_timeout_seconds=10
 
+# Direct TLS deployment: do not trust forwarding headers. Behind local Nginx or
+# Caddy, set listen_address=127.0.0.1 and trusted_proxy_cidrs=127.0.0.1/32,::1/128.
+trusted_proxy_cidrs=none
+proxy_forwarded_header_max_bytes=4096
+
+# Replace this origin with the real browser application origin. Production mode
+# refuses the wildcard value.
+cors_allowed_origins=https://app.example.com
+cors_allow_credentials=false
+cors_max_age_seconds=600
+
+hsts_enabled=true
+hsts_max_age_seconds=31536000
+hsts_include_subdomains=true
+hsts_preload=false
+
 http_max_connections=4096
 http_rate_limit_requests=100
 http_rate_limit_window_seconds=1

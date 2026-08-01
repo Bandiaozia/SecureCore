@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace secure {
 
@@ -88,6 +89,31 @@ public:
     std::uint32_t
     tls_handshake_timeout_seconds()
         const noexcept;
+
+
+    const std::vector<std::string>&
+    trusted_proxy_cidrs() const noexcept;
+
+    std::uint32_t
+    proxy_forwarded_header_max_bytes()
+        const noexcept;
+
+    const std::vector<std::string>&
+    cors_allowed_origins() const noexcept;
+
+    bool cors_allow_credentials() const noexcept;
+
+    std::uint32_t cors_max_age_seconds()
+        const noexcept;
+
+    bool hsts_enabled() const noexcept;
+
+    std::uint32_t hsts_max_age_seconds()
+        const noexcept;
+
+    bool hsts_include_subdomains() const noexcept;
+
+    bool hsts_preload() const noexcept;
 
     std::uint32_t
     http_max_connections() const noexcept;
@@ -184,6 +210,29 @@ private:
 
     std::uint32_t
         tls_handshake_timeout_seconds_{10};
+
+
+    std::vector<std::string>
+        trusted_proxy_cidrs_;
+
+    std::uint32_t
+        proxy_forwarded_header_max_bytes_{4096};
+
+    std::vector<std::string>
+        cors_allowed_origins_{"*"};
+
+    bool cors_allow_credentials_{false};
+
+    std::uint32_t cors_max_age_seconds_{600};
+
+    bool hsts_enabled_{true};
+
+    std::uint32_t
+        hsts_max_age_seconds_{31536000};
+
+    bool hsts_include_subdomains_{true};
+
+    bool hsts_preload_{false};
 
     std::uint32_t
         http_max_connections_{1024};

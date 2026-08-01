@@ -86,6 +86,18 @@ std::string default_api_error_message(
     if (code == "headers_too_large") {
         return "The request headers exceed the configured size limit.";
     }
+    if (code == "forwarded_header_too_large") {
+        return "Proxy forwarding headers exceed the configured size limit.";
+    }
+    if (code == "invalid_forwarded_header") {
+        return "The proxy forwarding header is invalid.";
+    }
+    if (code == "cors_origin_denied") {
+        return "The request origin is not allowed.";
+    }
+    if (code == "cors_preflight_denied") {
+        return "The CORS preflight request is not allowed.";
+    }
     if (code == "rate_limit_exceeded") {
         return "Too many requests were sent.";
     }

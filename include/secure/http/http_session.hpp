@@ -26,6 +26,7 @@ class MetricsRegistry;
 class MiddlewarePipeline;
 class Router;
 class WorkerPool;
+class TrustedProxyResolver;
 
 class HttpSession final
     : public Connection,
@@ -41,6 +42,7 @@ public:
         MiddlewarePipeline& middleware_pipeline,
         WorkerPool& worker_pool,
         MetricsRegistry& metrics_registry,
+        TrustedProxyResolver& trusted_proxy_resolver,
         const HttpLimits& limits
     );
 
@@ -117,9 +119,11 @@ private:
 
     MetricsRegistry& metrics_registry_;
 
+    TrustedProxyResolver& trusted_proxy_resolver_;
+
     HttpLimits limits_;
 
-    std::string client_ip_;
+    std::string peer_ip_;
 
     boost::beast::flat_buffer buffer_;
 

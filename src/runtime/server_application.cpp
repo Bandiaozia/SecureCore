@@ -216,6 +216,23 @@ ServerApplication::ServerApplication(
                   .http_rate_limit_window_seconds()
           }
       ),
+      cors_policy_(
+          config_.cors_allowed_origins(),
+          config_.cors_allow_credentials(),
+          config_.cors_max_age_seconds()
+      ),
+      hsts_policy_(
+          HstsPolicy{
+              config_.hsts_enabled(),
+              config_.hsts_max_age_seconds(),
+              config_.hsts_include_subdomains(),
+              config_.hsts_preload()
+          }
+      ),
+      trusted_proxy_resolver_(
+          config_.trusted_proxy_cidrs(),
+          config_.proxy_forwarded_header_max_bytes()
+      ),
       database_(
           config_.database_path(),
           config_.database_pool_size(),
@@ -311,6 +328,7 @@ ServerApplication::ServerApplication(
           middleware_pipeline_,
           worker_pool_,
           metrics_registry_,
+          trusted_proxy_resolver_,
           HttpLimits{
               config_
                   .http_max_header_bytes(),
@@ -415,7 +433,9 @@ ServerApplication::ServerApplication(
         middleware_pipeline_,
         rate_limiter_,
         logger_,
-        metrics_registry_
+        metrics_registry_,
+        cors_policy_,
+        hsts_policy_
     );
 
     signals_.async_wait(
@@ -483,6 +503,28 @@ int ServerApplication::run() {
         config_
             .http_rate_limit_window_seconds(),
         " second(s)."
+    );
+
+    logger_.info(
+        "Trusted proxy networks: ",
+        trusted_proxy_resolver_.trusted_network_count(),
+        "; forwarding header limit: ",
+        trusted_proxy_resolver_.forwarded_header_max_bytes(),
+        " bytes."
+    );
+
+    logger_.info(
+        "CORS origins: ",
+        cors_policy_.wildcard()
+            ? std::string("wildcard")
+            : std::to_string(
+                  cors_policy_.allowed_origins().size()
+              ),
+        "; credentials: ",
+        cors_policy_.allow_credentials()
+            ? "enabled"
+            : "disabled",
+        "."
     );
 
     logger_.info(

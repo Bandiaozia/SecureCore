@@ -37,6 +37,15 @@ constexpr std::array environment_variables{
     "SECURECORE_TLS_CERTIFICATE_FILE",
     "SECURECORE_TLS_PRIVATE_KEY_FILE",
     "SECURECORE_TLS_HANDSHAKE_TIMEOUT_SECONDS",
+    "SECURECORE_TRUSTED_PROXY_CIDRS",
+    "SECURECORE_PROXY_FORWARDED_HEADER_MAX_BYTES",
+    "SECURECORE_CORS_ALLOWED_ORIGINS",
+    "SECURECORE_CORS_ALLOW_CREDENTIALS",
+    "SECURECORE_CORS_MAX_AGE_SECONDS",
+    "SECURECORE_HSTS_ENABLED",
+    "SECURECORE_HSTS_MAX_AGE_SECONDS",
+    "SECURECORE_HSTS_INCLUDE_SUBDOMAINS",
+    "SECURECORE_HSTS_PRELOAD",
     "SECURECORE_HTTP_MAX_CONNECTIONS",
     "SECURECORE_HTTP_RATE_LIMIT_REQUESTS",
     "SECURECORE_HTTP_RATE_LIMIT_WINDOW_SECONDS",
@@ -160,6 +169,15 @@ std::string base_config(
         "auth_login_lockout_seconds=15\n"
         "auth_login_max_lockout_seconds=120\n"
         "tls_enabled=false\n"
+        "trusted_proxy_cidrs=127.0.0.1/32,10.0.0.0/8\n"
+        "proxy_forwarded_header_max_bytes=2048\n"
+        "cors_allowed_origins=https://app.example.com,https://admin.example.com\n"
+        "cors_allow_credentials=true\n"
+        "cors_max_age_seconds=300\n"
+        "hsts_enabled=true\n"
+        "hsts_max_age_seconds=31536000\n"
+        "hsts_include_subdomains=true\n"
+        "hsts_preload=false\n"
         "http_max_connections=64\n"
         "http_rate_limit_requests=10\n"
         "http_rate_limit_window_seconds=2\n";
@@ -255,6 +273,38 @@ int main() {
         );
 
         require(
+            config.trusted_proxy_cidrs().size() == 2,
+            "Trusted proxy CIDRs were not loaded"
+        );
+
+        require(
+            config.proxy_forwarded_header_max_bytes() == 2048,
+            "Forwarded header limit was not loaded"
+        );
+
+        require(
+            config.cors_allowed_origins().size() == 2,
+            "CORS origins were not loaded"
+        );
+
+        require(
+            config.cors_allow_credentials(),
+            "CORS credentials setting was not loaded"
+        );
+
+        require(
+            config.cors_max_age_seconds() == 300,
+            "CORS max age was not loaded"
+        );
+
+        require(
+            config.hsts_enabled() &&
+            config.hsts_include_subdomains() &&
+            !config.hsts_preload(),
+            "HSTS settings were not loaded"
+        );
+
+        require(
             config.database_acquire_timeout_ms() == 250,
             "File database timeout was not loaded"
         );
@@ -335,6 +385,30 @@ int main() {
             1
         );
 
+        ::setenv(
+            "SECURECORE_TRUSTED_PROXY_CIDRS",
+            "192.0.2.0/24",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_CORS_ALLOWED_ORIGINS",
+            "https://override.example.com",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_CORS_ALLOW_CREDENTIALS",
+            "false",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_HSTS_MAX_AGE_SECONDS",
+            "63072000",
+            1
+        );
+
         config =
             secure::ServerConfig::load_from_file(
                 config_path.string()
@@ -390,6 +464,29 @@ int main() {
             "Environment did not override maximum lockout"
         );
 
+        require(
+            config.trusted_proxy_cidrs().size() == 1 &&
+            config.trusted_proxy_cidrs().front() == "192.0.2.0/24",
+            "Environment did not override trusted proxies"
+        );
+
+        require(
+            config.cors_allowed_origins().size() == 1 &&
+            config.cors_allowed_origins().front() ==
+                "https://override.example.com",
+            "Environment did not override CORS origins"
+        );
+
+        require(
+            !config.cors_allow_credentials(),
+            "Environment did not override CORS credentials"
+        );
+
+        require(
+            config.hsts_max_age_seconds() == 63072000,
+            "Environment did not override HSTS max age"
+        );
+
         ::setenv(
             "SECURECORE_LISTEN_PORT",
             "not-a-port",
@@ -418,6 +515,10 @@ int main() {
         ::unsetenv("SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT");
         ::unsetenv("SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS");
         ::unsetenv("SECURECORE_ENVIRONMENT");
+        ::unsetenv("SECURECORE_TRUSTED_PROXY_CIDRS");
+        ::unsetenv("SECURECORE_CORS_ALLOWED_ORIGINS");
+        ::unsetenv("SECURECORE_CORS_ALLOW_CREDENTIALS");
+        ::unsetenv("SECURECORE_HSTS_MAX_AGE_SECONDS");
 
         write_file(
             config_path,
@@ -454,6 +555,41 @@ int main() {
                 config.validate_for_server();
             },
             "unencrypted HTTP"
+        );
+
+        write_file(
+            config_path,
+            base_config(root) +
+            "cors_allowed_origins=*\n"
+            "cors_allow_credentials=true\n"
+        );
+
+        require_throws(
+            [&] {
+                static_cast<void>(
+                    secure::ServerConfig::load_from_file(
+                        config_path.string()
+                    )
+                );
+            },
+            "cors_allow_credentials"
+        );
+
+        write_file(
+            config_path,
+            base_config(root) +
+            "trusted_proxy_cidrs=10.0.0.0/99\n"
+        );
+
+        require_throws(
+            [&] {
+                static_cast<void>(
+                    secure::ServerConfig::load_from_file(
+                        config_path.string()
+                    )
+                );
+            },
+            "trusted_proxy_cidrs"
         );
 
         const auto certificate_path =

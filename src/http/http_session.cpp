@@ -6,6 +6,7 @@
 #include "secure/http/router.hpp"
 #include "secure/log/logger.hpp"
 #include "secure/net/connection_manager.hpp"
+#include "secure/net/trusted_proxy.hpp"
 #include "secure/observability/metrics_registry.hpp"
 #include "secure/runtime/worker_pool.hpp"
 
@@ -54,6 +55,7 @@ HttpSession::HttpSession(
     MiddlewarePipeline& middleware_pipeline,
     WorkerPool& worker_pool,
     MetricsRegistry& metrics_registry,
+    TrustedProxyResolver& trusted_proxy_resolver,
     const HttpLimits& limits
 )
     : stream_(std::move(socket)),
@@ -70,6 +72,7 @@ HttpSession::HttpSession(
       ),
       worker_pool_(worker_pool),
       metrics_registry_(metrics_registry),
+      trusted_proxy_resolver_(trusted_proxy_resolver),
       limits_(limits) {
     boost::system::error_code error;
 
@@ -79,9 +82,9 @@ HttpSession::HttpSession(
         );
 
     if (error) {
-        client_ip_ = "unknown";
+        peer_ip_ = "unknown";
     } else {
-        client_ip_ =
+        peer_ip_ =
             endpoint.address().to_string();
     }
 
@@ -133,7 +136,7 @@ void HttpSession::do_start() {
 
     logger_.info(
         "HTTP session started from ",
-        client_ip_,
+        peer_ip_,
         '.'
     );
 
@@ -274,7 +277,7 @@ void HttpSession::handle_read(
     if (error == beast::error::timeout) {
         logger_.warning(
             "HTTP read timeout from ",
-            client_ip_,
+            peer_ip_,
             '.'
         );
 
@@ -307,8 +310,8 @@ void HttpSession::handle_request() {
     const unsigned request_version =
         request->version();
 
-    const std::string client_ip =
-        client_ip_;
+    const std::string peer_ip =
+        peer_ip_;
 
     auto self =
         shared_from_this();
@@ -318,15 +321,45 @@ void HttpSession::handle_request() {
             [
                 self,
                 request = std::move(request),
-                client_ip,
+                peer_ip,
                 request_id
             ] {
                 HttpResponse response;
 
                 try {
+                    ResolvedClient resolved{
+                        peer_ip,
+                        false,
+                        false
+                    };
+
+                    std::optional<ApiError>
+                        proxy_error;
+
+                    try {
+                        resolved =
+                            self->trusted_proxy_resolver_
+                                .resolve(
+                                    peer_ip,
+                                    *request,
+                                    false
+                                );
+                    } catch (
+                        const ProxyHeaderError& error
+                    ) {
+                        proxy_error = ApiError{
+                            error.code(),
+                            error.what(),
+                            {}
+                        };
+                    }
+
                     const RequestContext context{
                         *request,
-                        client_ip
+                        resolved.client_ip,
+                        peer_ip,
+                        resolved.secure_transport,
+                        resolved.used_forwarded_headers
                     };
 
                     response =
@@ -335,8 +368,17 @@ void HttpSession::handle_request() {
                                 context,
                                 [
                                     self,
-                                    request
+                                    request,
+                                    proxy_error =
+                                        std::move(proxy_error)
                                 ] {
+                                    if (proxy_error.has_value()) {
+                                        throw ApiException(
+                                            http::status::bad_request,
+                                            *proxy_error
+                                        );
+                                    }
+
                                     return self->router_
                                         .dispatch(
                                             *request
@@ -650,7 +692,7 @@ void HttpSession::send_protocol_error(
 ) {
     logger_.warning(
         "Rejected HTTP request from ",
-        client_ip_,
+        peer_ip_,
         ": ",
         error_code,
         '.'
@@ -705,7 +747,7 @@ void HttpSession::handle_disconnect(
     ) {
         logger_.warning(
             "HTTP connection from ",
-            client_ip_,
+            peer_ip_,
             " ended with error: ",
             error.message()
         );
@@ -719,7 +761,7 @@ void HttpSession::handle_disconnect(
 
     logger_.info(
         "HTTP client ",
-        client_ip_,
+        peer_ip_,
         " disconnected. Active connections: ",
         connection_manager_.size()
     );

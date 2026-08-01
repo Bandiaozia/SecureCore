@@ -1,5 +1,6 @@
 #include "secure/config/server_config.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cctype>
@@ -12,6 +13,10 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
+
+#include <boost/asio/ip/address.hpp>
+#include <boost/system/error_code.hpp>
 
 namespace secure {
 
@@ -112,6 +117,42 @@ constexpr std::array environment_mappings{
         "tls_handshake_timeout_seconds"
     },
     EnvironmentMapping{
+        "SECURECORE_TRUSTED_PROXY_CIDRS",
+        "trusted_proxy_cidrs"
+    },
+    EnvironmentMapping{
+        "SECURECORE_PROXY_FORWARDED_HEADER_MAX_BYTES",
+        "proxy_forwarded_header_max_bytes"
+    },
+    EnvironmentMapping{
+        "SECURECORE_CORS_ALLOWED_ORIGINS",
+        "cors_allowed_origins"
+    },
+    EnvironmentMapping{
+        "SECURECORE_CORS_ALLOW_CREDENTIALS",
+        "cors_allow_credentials"
+    },
+    EnvironmentMapping{
+        "SECURECORE_CORS_MAX_AGE_SECONDS",
+        "cors_max_age_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_HSTS_ENABLED",
+        "hsts_enabled"
+    },
+    EnvironmentMapping{
+        "SECURECORE_HSTS_MAX_AGE_SECONDS",
+        "hsts_max_age_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_HSTS_INCLUDE_SUBDOMAINS",
+        "hsts_include_subdomains"
+    },
+    EnvironmentMapping{
+        "SECURECORE_HSTS_PRELOAD",
+        "hsts_preload"
+    },
+    EnvironmentMapping{
         "SECURECORE_HTTP_MAX_CONNECTIONS",
         "http_max_connections"
     },
@@ -187,6 +228,159 @@ std::string lowercase(
     }
 
     return value;
+}
+
+std::vector<std::string> parse_csv_list(
+    const std::string& value,
+    std::string_view key,
+    std::string_view source,
+    bool allow_none
+) {
+    const std::string normalized = lowercase(value);
+
+    if (allow_none && normalized == "none") {
+        return {};
+    }
+
+    std::vector<std::string> result;
+    std::size_t start = 0;
+
+    while (start <= value.size()) {
+        const auto separator = value.find(',', start);
+        const auto length =
+            separator == std::string::npos
+                ? value.size() - start
+                : separator - start;
+
+        std::string item = trim(
+            std::string_view(value).substr(start, length)
+        );
+
+        if (item.empty()) {
+            throw std::runtime_error(
+                "Invalid " + std::string(key) +
+                " from " + std::string(source) +
+                ": list entries must not be empty"
+            );
+        }
+
+        result.push_back(std::move(item));
+
+        if (separator == std::string::npos) {
+            break;
+        }
+
+        start = separator + 1;
+    }
+
+    return result;
+}
+
+void validate_proxy_cidr(
+    const std::string& cidr
+) {
+    const auto separator = cidr.find('/');
+    const std::string address_text =
+        separator == std::string::npos
+            ? cidr
+            : cidr.substr(0, separator);
+
+    boost::system::error_code error;
+    const auto address = boost::asio::ip::make_address(
+        address_text,
+        error
+    );
+
+    if (error) {
+        throw std::runtime_error(
+            "Invalid trusted_proxy_cidrs entry: " + cidr
+        );
+    }
+
+    if (separator == std::string::npos) {
+        return;
+    }
+
+    const std::string prefix = cidr.substr(separator + 1);
+
+    if (prefix.empty()) {
+        throw std::runtime_error(
+            "Invalid trusted_proxy_cidrs prefix: " + cidr
+        );
+    }
+
+    const unsigned maximum = address.is_v4() ? 32U : 128U;
+
+    if (
+        !std::all_of(
+            prefix.begin(),
+            prefix.end(),
+            [](char character) {
+                return std::isdigit(
+                    static_cast<unsigned char>(character)
+                ) != 0;
+            }
+        )
+    ) {
+        throw std::runtime_error(
+            "Invalid trusted_proxy_cidrs prefix: " + cidr
+        );
+    }
+
+    unsigned long parsed = 0;
+
+    try {
+        parsed = std::stoul(prefix);
+    } catch (const std::exception&) {
+        throw std::runtime_error(
+            "Invalid trusted_proxy_cidrs prefix: " + cidr
+        );
+    }
+
+    if (parsed > maximum) {
+        throw std::runtime_error(
+            "Invalid trusted_proxy_cidrs prefix: " + cidr
+        );
+    }
+}
+
+bool valid_cors_origin(
+    std::string_view origin
+) {
+    if (origin == "*") {
+        return true;
+    }
+
+    if (
+        origin.empty() ||
+        origin.find_first_of(" \t\r\n") !=
+            std::string_view::npos
+    ) {
+        return false;
+    }
+
+    std::size_t authority_start = 0;
+
+    if (origin.starts_with("http://")) {
+        authority_start = 7;
+    } else if (origin.starts_with("https://")) {
+        authority_start = 8;
+    } else {
+        return false;
+    }
+
+    if (authority_start >= origin.size()) {
+        return false;
+    }
+
+    const auto authority = origin.substr(authority_start);
+
+    return (
+        authority.find('/') == std::string_view::npos &&
+        authority.find('?') == std::string_view::npos &&
+        authority.find('#') == std::string_view::npos &&
+        authority.find('@') == std::string_view::npos
+    );
 }
 
 std::uint64_t parse_unsigned(
@@ -718,6 +912,95 @@ void ServerConfig::apply_setting(
                 )
             );
     } else if (
+        key == "trusted_proxy_cidrs"
+    ) {
+        trusted_proxy_cidrs_ = parse_csv_list(
+            value,
+            key,
+            source,
+            true
+        );
+    } else if (
+        key == "proxy_forwarded_header_max_bytes"
+    ) {
+        proxy_forwarded_header_max_bytes_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    128,
+                    65536
+                )
+            );
+    } else if (
+        key == "cors_allowed_origins"
+    ) {
+        cors_allowed_origins_ = parse_csv_list(
+            value,
+            key,
+            source,
+            false
+        );
+    } else if (
+        key == "cors_allow_credentials"
+    ) {
+        cors_allow_credentials_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
+        key == "cors_max_age_seconds"
+    ) {
+        cors_max_age_seconds_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    0,
+                    86400
+                )
+            );
+    } else if (
+        key == "hsts_enabled"
+    ) {
+        hsts_enabled_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
+        key == "hsts_max_age_seconds"
+    ) {
+        hsts_max_age_seconds_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value,
+                    key,
+                    source,
+                    0,
+                    63072000
+                )
+            );
+    } else if (
+        key == "hsts_include_subdomains"
+    ) {
+        hsts_include_subdomains_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
+        key == "hsts_preload"
+    ) {
+        hsts_preload_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
         key == "http_max_connections"
     ) {
         http_max_connections_ =
@@ -902,6 +1185,61 @@ void ServerConfig::validate_common() const {
             "auth_login_lockout_seconds"
         );
     }
+
+    for (const std::string& cidr : trusted_proxy_cidrs_) {
+        validate_proxy_cidr(cidr);
+    }
+
+    if (cors_allowed_origins_.empty()) {
+        throw std::runtime_error(
+            "cors_allowed_origins must not be empty"
+        );
+    }
+
+    bool wildcard_origin = false;
+
+    for (const std::string& origin : cors_allowed_origins_) {
+        if (!valid_cors_origin(origin)) {
+            throw std::runtime_error(
+                "Invalid cors_allowed_origins entry: " + origin
+            );
+        }
+
+        if (origin == "*") {
+            wildcard_origin = true;
+        }
+    }
+
+    if (
+        wildcard_origin &&
+        cors_allowed_origins_.size() != 1
+    ) {
+        throw std::runtime_error(
+            "CORS wildcard cannot be combined with exact origins"
+        );
+    }
+
+    if (
+        wildcard_origin &&
+        cors_allow_credentials_
+    ) {
+        throw std::runtime_error(
+            "cors_allow_credentials cannot be true when cors_allowed_origins=*"
+        );
+    }
+
+    if (
+        hsts_preload_ &&
+        (
+            !hsts_enabled_ ||
+            !hsts_include_subdomains_ ||
+            hsts_max_age_seconds_ < 31536000
+        )
+    ) {
+        throw std::runtime_error(
+            "hsts_preload requires HSTS enabled, includeSubDomains, and max-age of at least 31536000"
+        );
+    }
 }
 
 void ServerConfig::validate_for_server() const {
@@ -954,6 +1292,15 @@ void ServerConfig::validate_for_server() const {
                 "rate limiting"
             );
         }
+
+        if (
+            cors_allowed_origins_.size() == 1 &&
+            cors_allowed_origins_.front() == "*"
+        ) {
+            throw std::runtime_error(
+                "Production mode requires an explicit CORS origin allowlist"
+            );
+        }
     }
 }
 
@@ -1001,6 +1348,20 @@ std::string ServerConfig::redacted_summary()
         << "-"
         << auth_login_max_lockout_seconds_
         << "s"
+        << ", trusted_proxy_networks="
+        << trusted_proxy_cidrs_.size()
+        << ", forwarded_header_limit="
+        << proxy_forwarded_header_max_bytes_
+        << " bytes"
+        << ", cors_origins="
+        << (
+            cors_allowed_origins_.size() == 1 &&
+            cors_allowed_origins_.front() == "*"
+                ? "wildcard"
+                : std::to_string(cors_allowed_origins_.size())
+          )
+        << ", hsts="
+        << (hsts_enabled_ ? "enabled" : "disabled")
         << ", max_connections="
         << http_max_connections_
         << ", rate_limit="
@@ -1138,6 +1499,54 @@ std::uint32_t
 ServerConfig::tls_handshake_timeout_seconds()
     const noexcept {
     return tls_handshake_timeout_seconds_;
+}
+
+const std::vector<std::string>&
+ServerConfig::trusted_proxy_cidrs()
+    const noexcept {
+    return trusted_proxy_cidrs_;
+}
+
+std::uint32_t
+ServerConfig::proxy_forwarded_header_max_bytes()
+    const noexcept {
+    return proxy_forwarded_header_max_bytes_;
+}
+
+const std::vector<std::string>&
+ServerConfig::cors_allowed_origins()
+    const noexcept {
+    return cors_allowed_origins_;
+}
+
+bool ServerConfig::cors_allow_credentials()
+    const noexcept {
+    return cors_allow_credentials_;
+}
+
+std::uint32_t ServerConfig::cors_max_age_seconds()
+    const noexcept {
+    return cors_max_age_seconds_;
+}
+
+bool ServerConfig::hsts_enabled()
+    const noexcept {
+    return hsts_enabled_;
+}
+
+std::uint32_t ServerConfig::hsts_max_age_seconds()
+    const noexcept {
+    return hsts_max_age_seconds_;
+}
+
+bool ServerConfig::hsts_include_subdomains()
+    const noexcept {
+    return hsts_include_subdomains_;
+}
+
+bool ServerConfig::hsts_preload()
+    const noexcept {
+    return hsts_preload_;
 }
 
 std::uint32_t

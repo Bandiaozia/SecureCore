@@ -298,6 +298,10 @@ class SecureCoreHttpsTests(unittest.TestCase):
             headers.get("server"),
             "SecureCore",
         )
+        self.assertEqual(
+            headers.get("strict-transport-security"),
+            "max-age=31536000; includeSubDomains",
+        )
 
         status, body, _ = self.request(
             "GET",

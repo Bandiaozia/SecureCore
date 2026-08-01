@@ -1,5 +1,6 @@
 #pragma once
 
+#include "secure/http/cors_policy.hpp"
 #include "secure/http/http_types.hpp"
 
 #include <cstddef>
@@ -17,6 +18,12 @@ struct RequestContext final {
     const HttpRequest& request;
 
     const std::string& client_ip;
+
+    const std::string& peer_ip;
+
+    bool secure_transport{false};
+
+    bool used_forwarded_headers{false};
 };
 
 class MiddlewarePipeline final {
@@ -58,7 +65,9 @@ void register_default_middlewares(
     MiddlewarePipeline& pipeline,
     RateLimiter& rate_limiter,
     Logger& logger,
-    MetricsRegistry& metrics_registry
+    MetricsRegistry& metrics_registry,
+    const CorsPolicy& cors_policy,
+    HstsPolicy hsts_policy
 );
 
 }  // namespace secure
