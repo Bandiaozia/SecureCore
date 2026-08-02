@@ -214,7 +214,8 @@ ServerApplication::ServerApplication(
           std::chrono::seconds{
               config_
                   .http_rate_limit_window_seconds()
-          }
+          },
+          config_.http_rate_limit_max_buckets()
       ),
       cors_policy_(
           config_.cors_allowed_origins(),
@@ -274,7 +275,9 @@ ServerApplication::ServerApplication(
               std::chrono::seconds{
                   config_
                       .auth_login_max_lockout_seconds()
-              }
+              },
+              config_.auth_login_max_tracked_accounts(),
+              config_.auth_login_max_tracked_ips()
           }
       ),
       auth_service_(
@@ -392,7 +395,8 @@ ServerApplication::ServerApplication(
         service_state_,
         user_service_,
         auth_service_,
-        audit_service_
+        audit_service_,
+        config_.registration_enabled()
     );
 
     register_admin_routes(

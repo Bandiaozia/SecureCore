@@ -73,6 +73,7 @@ class SecureCoreHttpTests(unittest.TestCase):
             "\n".join(
                 [
                     "environment=test",
+                    "registration_enabled=true",
                     f"listen_address={HOST}",
                     f"listen_port={cls.port}",
                     f"log_file={log_path}",

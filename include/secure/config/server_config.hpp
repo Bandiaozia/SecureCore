@@ -58,6 +58,8 @@ public:
 
     bool metrics_require_auth() const noexcept;
 
+    bool registration_enabled() const noexcept;
+
     std::uint32_t
     auth_login_account_failure_limit()
         const noexcept;
@@ -76,6 +78,14 @@ public:
 
     std::uint32_t
     auth_login_max_lockout_seconds()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_max_tracked_accounts()
+        const noexcept;
+
+    std::uint32_t
+    auth_login_max_tracked_ips()
         const noexcept;
 
     bool tls_enabled() const noexcept;
@@ -123,6 +133,9 @@ public:
 
     std::uint32_t
     http_rate_limit_window_seconds() const noexcept;
+
+    std::uint32_t
+    http_rate_limit_max_buckets() const noexcept;
 
     std::uint32_t
     http_max_header_bytes() const noexcept;
@@ -187,6 +200,8 @@ private:
 
     bool metrics_require_auth_{false};
 
+    bool registration_enabled_{false};
+
     std::uint32_t
         auth_login_account_failure_limit_{5};
 
@@ -201,6 +216,12 @@ private:
 
     std::uint32_t
         auth_login_max_lockout_seconds_{3600};
+
+    std::uint32_t
+        auth_login_max_tracked_accounts_{65536};
+
+    std::uint32_t
+        auth_login_max_tracked_ips_{65536};
 
     bool tls_enabled_{false};
 
@@ -242,6 +263,9 @@ private:
 
     std::uint32_t
         http_rate_limit_window_seconds_{1};
+
+    std::uint32_t
+        http_rate_limit_max_buckets_{65536};
 
     std::uint32_t
         http_max_header_bytes_{

@@ -88,6 +88,15 @@ AuthAbuseProtector::AuthAbuseProtector(
             "Authentication lockout durations are invalid"
         );
     }
+
+    if (
+        config_.maximum_tracked_accounts == 0 ||
+        config_.maximum_tracked_ips == 0
+    ) {
+        throw std::invalid_argument(
+            "Authentication tracking capacities must be positive"
+        );
+    }
 }
 
 AuthAbuseDecision AuthAbuseProtector::check(
@@ -149,6 +158,17 @@ AuthAbuseDecision AuthAbuseProtector::record_failure(
     std::lock_guard lock(mutex_);
 
     prune_if_needed(now);
+
+    ensure_capacity(
+        account_states_,
+        account_key,
+        config_.maximum_tracked_accounts
+    );
+    ensure_capacity(
+        ip_states_,
+        ip_key,
+        config_.maximum_tracked_ips
+    );
 
     auto& account_state = account_states_[account_key];
     auto& ip_state = ip_states_[ip_key];
@@ -421,6 +441,21 @@ void AuthAbuseProtector::prune_if_needed(
 
     prune(account_states_);
     prune(ip_states_);
+}
+
+void AuthAbuseProtector::ensure_capacity(
+    std::unordered_map<std::string, FailureState>& states,
+    std::string_view key,
+    std::size_t maximum_size
+) {
+    if (
+        states.contains(std::string(key)) ||
+        states.size() < maximum_size
+    ) {
+        return;
+    }
+
+    states.erase(states.begin());
 }
 
 }  // namespace secure

@@ -71,6 +71,29 @@ whose current RBAC roles grant `metrics.read`.
 The environment-variable equivalent is
 `SECURECORE_METRICS_REQUIRE_AUTH=true`.
 
+## Account registration
+
+`registration_enabled` controls whether `POST /v1/auth/register` is
+registered. It defaults to `false`; the development and test configurations
+enable it explicitly. Keep it disabled in production unless public account
+creation is intentional. The environment-variable equivalent is
+`SECURECORE_REGISTRATION_ENABLED=true`.
+
+## In-memory security state limits
+
+The HTTP rate limiter and login-abuse protector use bounded in-memory maps.
+When a capacity is reached, one existing entry is evicted in constant time.
+
+```ini
+http_rate_limit_max_buckets=65536
+auth_login_max_tracked_accounts=65536
+auth_login_max_tracked_ips=65536
+```
+
+These limits prevent attacker-controlled IP addresses or account identifiers
+from causing unbounded memory growth. Tune them above the expected number of
+active clients and login identifiers in one protection window.
+
 
 ## Trusted reverse proxies and client addresses
 

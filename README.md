@@ -49,7 +49,25 @@ cmake --build build -j4
 ctest \
     --test-dir build \
     --output-on-failure
+
+./build/secure-server configs/server.conf
 ```
+
+默认开发配置仅监听 `127.0.0.1:9090`，并显式开启账户注册。生产部署请复制
+`configs/server.production.conf.example`，配置 TLS、CORS 和文件路径；生产示例
+默认关闭公开注册，并保护 `/metrics`。
+
+主要认证端点：
+
+```text
+POST /v1/auth/register
+POST /v1/auth/login
+POST /v1/auth/refresh
+POST /v1/auth/logout
+POST /v1/auth/logout-all
+```
+
+详细配置、安全边界和测试方式见 `configs/CONFIGURATION.md` 与 `docs/`。
 
 ## 项目架构
 
@@ -79,3 +97,8 @@ flowchart LR
 ./build/secure-server --version
 ./build/secure-admin --version
 ```
+
+## 安全与许可证
+
+安全问题请按照 `SECURITY.md` 私下报告。项目采用 MIT License，详见
+`LICENSE`。

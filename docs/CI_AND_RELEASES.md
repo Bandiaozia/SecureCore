@@ -32,7 +32,7 @@ scripts/run-sanitizers.sh
 
 ## Tagged releases
 
-Pushing a semantic-version tag such as `v1.0.0` starts
+Pushing a semantic-version tag such as `v1.0.1` starts
 `.github/workflows/release.yml`. The workflow:
 
 1. builds the Release binaries twice from clean build directories;
@@ -44,8 +44,8 @@ Pushing a semantic-version tag such as `v1.0.0` starts
 Create a release after `main` is clean and fully tested:
 
 ```bash
-git tag -a v1.0.0 -m "SecureCore v1.0.0"
-git push origin v1.0.0
+git tag -a v1.0.1 -m "SecureCore v1.0.1"
+git push origin v1.0.1
 ```
 
 The package contains:

@@ -289,6 +289,20 @@ LoginResult AuthService::login(
         );
     }
 
+    if (password_hasher_.needs_rehash(user->password_hash)) {
+        const std::string upgraded_hash =
+            password_hasher_.hash(password);
+
+        if (!user_repository_.set_password_hash(
+                user->id,
+                upgraded_hash
+            )) {
+            throw std::runtime_error(
+                "Failed to upgrade password hash"
+            );
+        }
+    }
+
     auth_abuse_protector_.record_success(
         login,
         client_ip

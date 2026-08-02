@@ -22,7 +22,8 @@ class RateLimiter final {
 public:
     RateLimiter(
         std::size_t max_requests,
-        std::chrono::seconds window
+        std::chrono::seconds window,
+        std::size_t max_buckets = 65536
     );
 
     [[nodiscard]]
@@ -47,6 +48,8 @@ private:
     const std::size_t max_requests_;
 
     const std::chrono::seconds window_;
+
+    const std::size_t max_buckets_;
 
     std::mutex mutex_;
 

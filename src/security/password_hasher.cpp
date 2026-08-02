@@ -82,4 +82,27 @@ bool PasswordHasher::verify(
     );
 }
 
+bool PasswordHasher::needs_rehash(
+    std::string_view encoded_hash
+) const {
+    if (encoded_hash.empty()) {
+        return false;
+    }
+
+    const std::string hash_text(encoded_hash);
+    const int result = crypto_pwhash_str_needs_rehash(
+        hash_text.c_str(),
+        crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        crypto_pwhash_MEMLIMIT_INTERACTIVE
+    );
+
+    if (result < 0) {
+        throw std::runtime_error(
+            "Password hash parameters could not be inspected"
+        );
+    }
+
+    return result != 0;
+}
+
 }  // namespace secure
