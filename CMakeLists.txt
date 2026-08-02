@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(
     SecureCore
-    VERSION 0.1.0
+    VERSION 1.0.1
     LANGUAGES CXX
 )
 
@@ -527,6 +527,31 @@ if(BUILD_TESTING)
         NAME securecore-auth-abuse-unit
         COMMAND
             securecore-auth-abuse-test
+    )
+
+    add_executable(
+        securecore-rate-limiter-test
+        tests/rate_limiter_test.cpp
+    )
+
+    target_link_libraries(
+        securecore-rate-limiter-test
+        PRIVATE
+            securecore
+    )
+
+    target_compile_options(
+        securecore-rate-limiter-test
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+
+    add_test(
+        NAME securecore-rate-limiter-unit
+        COMMAND
+            securecore-rate-limiter-test
     )
 
     add_test(

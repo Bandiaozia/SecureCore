@@ -53,6 +53,7 @@ class RunningServer:
             "\n".join(
                 [
                     "environment=test",
+                    "registration_enabled=true",
                     f"listen_address={HOST}",
                     f"listen_port={self.port}",
                     f"log_file={self.root / 'securecore.log'}",

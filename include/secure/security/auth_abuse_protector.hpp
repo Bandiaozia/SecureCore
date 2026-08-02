@@ -20,6 +20,10 @@ struct AuthAbuseConfig final {
     std::chrono::seconds base_lockout{300};
 
     std::chrono::seconds maximum_lockout{3600};
+
+    std::size_t maximum_tracked_accounts{65536};
+
+    std::size_t maximum_tracked_ips{65536};
 };
 
 struct AuthAbuseDecision final {
@@ -106,6 +110,12 @@ private:
 
     void prune_if_needed(
         Clock::time_point now
+    );
+
+    static void ensure_capacity(
+        std::unordered_map<std::string, FailureState>& states,
+        std::string_view key,
+        std::size_t maximum_size
     );
 
     AuthAbuseConfig config_;

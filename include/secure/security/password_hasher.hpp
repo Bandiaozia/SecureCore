@@ -19,6 +19,11 @@ public:
         std::string_view password,
         std::string_view encoded_hash
     ) const;
+
+    [[nodiscard]]
+    bool needs_rehash(
+        std::string_view encoded_hash
+    ) const;
 };
 
 }  // namespace secure

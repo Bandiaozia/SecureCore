@@ -41,6 +41,7 @@ hsts_preload=false
 http_max_connections=4096
 http_rate_limit_requests=100
 http_rate_limit_window_seconds=1
+http_rate_limit_max_buckets=65536
 
 http_max_header_bytes=16384
 http_max_body_bytes=1048576
@@ -50,6 +51,7 @@ http_write_timeout_seconds=10
 http_idle_timeout_seconds=30
 audit_retention_days=90
 metrics_require_auth=true
+registration_enabled=false
 
 # Login abuse protection. Lockout duration doubles after repeated lockouts
 # until auth_login_max_lockout_seconds is reached.
@@ -58,3 +60,5 @@ auth_login_ip_failure_limit=20
 auth_login_failure_window_seconds=300
 auth_login_lockout_seconds=300
 auth_login_max_lockout_seconds=3600
+auth_login_max_tracked_accounts=65536
+auth_login_max_tracked_ips=65536

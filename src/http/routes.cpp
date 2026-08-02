@@ -727,7 +727,8 @@ void register_routes(
     ServiceState& service_state,
     UserService& user_service,
     AuthService& auth_service,
-    AuditService& audit_service
+    AuditService& audit_service,
+    bool registration_enabled
 ) {
     router.get(
         "/health",
@@ -747,18 +748,20 @@ void register_routes(
         }
     );
 
-    router.post(
-        "/v1/auth/register",
-        [&user_service, &audit_service](
-            const HttpRequest& request
-        ) {
-            return register_handler(
-                user_service,
-                audit_service,
-                request
-            );
-        }
-    );
+    if (registration_enabled) {
+        router.post(
+            "/v1/auth/register",
+            [&user_service, &audit_service](
+                const HttpRequest& request
+            ) {
+                return register_handler(
+                    user_service,
+                    audit_service,
+                    request
+                );
+            }
+        );
+    }
 
     router.post(
         "/v1/auth/login",

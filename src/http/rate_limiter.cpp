@@ -6,13 +6,21 @@ namespace secure {
 
 RateLimiter::RateLimiter(
     std::size_t max_requests,
-    std::chrono::seconds window
+    std::chrono::seconds window,
+    std::size_t max_buckets
 )
     : max_requests_(max_requests),
-      window_(window) {
+      window_(window),
+      max_buckets_(max_buckets) {
     if (window_.count() <= 0) {
         throw std::invalid_argument(
             "Rate-limit window must be positive"
+        );
+    }
+
+    if (max_buckets_ == 0) {
+        throw std::invalid_argument(
+            "Rate-limit bucket capacity must be positive"
         );
     }
 }
@@ -34,6 +42,13 @@ RateLimitDecision RateLimiter::check(
     std::scoped_lock lock(mutex_);
 
     cleanup_locked(now);
+
+    if (
+        !buckets_.contains(client_ip) &&
+        buckets_.size() >= max_buckets_
+    ) {
+        buckets_.erase(buckets_.begin());
+    }
 
     const auto [iterator, inserted] =
         buckets_.try_emplace(

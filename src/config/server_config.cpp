@@ -81,6 +81,10 @@ constexpr std::array environment_mappings{
         "metrics_require_auth"
     },
     EnvironmentMapping{
+        "SECURECORE_REGISTRATION_ENABLED",
+        "registration_enabled"
+    },
+    EnvironmentMapping{
         "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
         "auth_login_account_failure_limit"
     },
@@ -99,6 +103,14 @@ constexpr std::array environment_mappings{
     EnvironmentMapping{
         "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
         "auth_login_max_lockout_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_MAX_TRACKED_ACCOUNTS",
+        "auth_login_max_tracked_accounts"
+    },
+    EnvironmentMapping{
+        "SECURECORE_AUTH_LOGIN_MAX_TRACKED_IPS",
+        "auth_login_max_tracked_ips"
     },
     EnvironmentMapping{
         "SECURECORE_TLS_ENABLED",
@@ -163,6 +175,10 @@ constexpr std::array environment_mappings{
     EnvironmentMapping{
         "SECURECORE_HTTP_RATE_LIMIT_WINDOW_SECONDS",
         "http_rate_limit_window_seconds"
+    },
+    EnvironmentMapping{
+        "SECURECORE_HTTP_RATE_LIMIT_MAX_BUCKETS",
+        "http_rate_limit_max_buckets"
     },
     EnvironmentMapping{
         "SECURECORE_HTTP_MAX_HEADER_BYTES",
@@ -819,6 +835,14 @@ void ServerConfig::apply_setting(
             source
         );
     } else if (
+        key == "registration_enabled"
+    ) {
+        registration_enabled_ = parse_boolean(
+            value,
+            key,
+            source
+        );
+    } else if (
         key == "auth_login_account_failure_limit"
     ) {
         auth_login_account_failure_limit_ =
@@ -881,6 +905,24 @@ void ServerConfig::apply_setting(
                     source,
                     1,
                     604800
+                )
+            );
+    } else if (
+        key == "auth_login_max_tracked_accounts"
+    ) {
+        auth_login_max_tracked_accounts_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value, key, source, 1, 10000000
+                )
+            );
+    } else if (
+        key == "auth_login_max_tracked_ips"
+    ) {
+        auth_login_max_tracked_ips_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value, key, source, 1, 10000000
                 )
             );
     } else if (key == "tls_enabled") {
@@ -1038,6 +1080,15 @@ void ServerConfig::apply_setting(
                     source,
                     1,
                     3600
+                )
+            );
+    } else if (
+        key == "http_rate_limit_max_buckets"
+    ) {
+        http_rate_limit_max_buckets_ =
+            static_cast<std::uint32_t>(
+                parse_unsigned(
+                    value, key, source, 1, 10000000
                 )
             );
     } else if (
@@ -1337,6 +1388,8 @@ std::string ServerConfig::redacted_summary()
         << audit_retention_days_
         << ", metrics_auth="
         << (metrics_require_auth_ ? "required" : "public")
+        << ", registration="
+        << (registration_enabled_ ? "enabled" : "disabled")
         << ", auth_login_limits="
         << auth_login_account_failure_limit_
         << "/account,"
@@ -1347,7 +1400,11 @@ std::string ServerConfig::redacted_summary()
         << auth_login_lockout_seconds_
         << "-"
         << auth_login_max_lockout_seconds_
-        << "s"
+        << "s, auth_tracking="
+        << auth_login_max_tracked_accounts_
+        << "/account,"
+        << auth_login_max_tracked_ips_
+        << "/ip"
         << ", trusted_proxy_networks="
         << trusted_proxy_cidrs_.size()
         << ", forwarded_header_limit="
@@ -1367,7 +1424,8 @@ std::string ServerConfig::redacted_summary()
         << ", rate_limit="
         << http_rate_limit_requests_
         << '/' << http_rate_limit_window_seconds_
-        << "s";
+        << "s, rate_limit_buckets="
+        << http_rate_limit_max_buckets_;
 
     return result.str();
 }
@@ -1448,6 +1506,11 @@ bool ServerConfig::metrics_require_auth()
     return metrics_require_auth_;
 }
 
+bool ServerConfig::registration_enabled()
+    const noexcept {
+    return registration_enabled_;
+}
+
 std::uint32_t
 ServerConfig::auth_login_account_failure_limit()
     const noexcept {
@@ -1476,6 +1539,18 @@ std::uint32_t
 ServerConfig::auth_login_max_lockout_seconds()
     const noexcept {
     return auth_login_max_lockout_seconds_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_max_tracked_accounts()
+    const noexcept {
+    return auth_login_max_tracked_accounts_;
+}
+
+std::uint32_t
+ServerConfig::auth_login_max_tracked_ips()
+    const noexcept {
+    return auth_login_max_tracked_ips_;
 }
 
 bool ServerConfig::tls_enabled()
@@ -1565,6 +1640,12 @@ std::uint32_t
 ServerConfig::http_rate_limit_window_seconds()
     const noexcept {
     return http_rate_limit_window_seconds_;
+}
+
+std::uint32_t
+ServerConfig::http_rate_limit_max_buckets()
+    const noexcept {
+    return http_rate_limit_max_buckets_;
 }
 
 std::uint32_t

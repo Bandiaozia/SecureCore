@@ -203,6 +203,34 @@ int main() {
         "account states tracked"
     );
 
+    secure::AuthAbuseProtector bounded_protector(
+        secure::AuthAbuseConfig{
+            100,
+            100,
+            60s,
+            10s,
+            40s,
+            2,
+            2
+        }
+    );
+
+    static_cast<void>(bounded_protector.record_failure(
+        "one", "192.0.2.1", started
+    ));
+    static_cast<void>(bounded_protector.record_failure(
+        "two", "192.0.2.2", started + 1s
+    ));
+    static_cast<void>(bounded_protector.record_failure(
+        "three", "192.0.2.3", started + 2s
+    ));
+
+    require(
+        bounded_protector.tracked_accounts() == 2 &&
+        bounded_protector.tracked_ips() == 2,
+        "tracking capacities are enforced"
+    );
+
     std::cout
         << "Authentication abuse protector tests passed\n";
 

@@ -28,11 +28,14 @@ constexpr std::array environment_variables{
     "SECURECORE_SHUTDOWN_GRACE_PERIOD_MS",
     "SECURECORE_AUDIT_RETENTION_DAYS",
     "SECURECORE_METRICS_REQUIRE_AUTH",
+    "SECURECORE_REGISTRATION_ENABLED",
     "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
     "SECURECORE_AUTH_LOGIN_IP_FAILURE_LIMIT",
     "SECURECORE_AUTH_LOGIN_FAILURE_WINDOW_SECONDS",
     "SECURECORE_AUTH_LOGIN_LOCKOUT_SECONDS",
     "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
+    "SECURECORE_AUTH_LOGIN_MAX_TRACKED_ACCOUNTS",
+    "SECURECORE_AUTH_LOGIN_MAX_TRACKED_IPS",
     "SECURECORE_TLS_ENABLED",
     "SECURECORE_TLS_CERTIFICATE_FILE",
     "SECURECORE_TLS_PRIVATE_KEY_FILE",
@@ -49,6 +52,7 @@ constexpr std::array environment_variables{
     "SECURECORE_HTTP_MAX_CONNECTIONS",
     "SECURECORE_HTTP_RATE_LIMIT_REQUESTS",
     "SECURECORE_HTTP_RATE_LIMIT_WINDOW_SECONDS",
+    "SECURECORE_HTTP_RATE_LIMIT_MAX_BUCKETS",
     "SECURECORE_HTTP_MAX_HEADER_BYTES",
     "SECURECORE_HTTP_MAX_BODY_BYTES",
     "SECURECORE_HTTP_READ_TIMEOUT_SECONDS",
@@ -163,11 +167,14 @@ std::string base_config(
         "shutdown_grace_period_ms=1500\n"
         "audit_retention_days=45\n"
         "metrics_require_auth=true\n"
+        "registration_enabled=true\n"
         "auth_login_account_failure_limit=4\n"
         "auth_login_ip_failure_limit=12\n"
         "auth_login_failure_window_seconds=90\n"
         "auth_login_lockout_seconds=15\n"
         "auth_login_max_lockout_seconds=120\n"
+        "auth_login_max_tracked_accounts=2000\n"
+        "auth_login_max_tracked_ips=3000\n"
         "tls_enabled=false\n"
         "trusted_proxy_cidrs=127.0.0.1/32,10.0.0.0/8\n"
         "proxy_forwarded_header_max_bytes=2048\n"
@@ -180,7 +187,8 @@ std::string base_config(
         "hsts_preload=false\n"
         "http_max_connections=64\n"
         "http_rate_limit_requests=10\n"
-        "http_rate_limit_window_seconds=2\n";
+        "http_rate_limit_window_seconds=2\n"
+        "http_rate_limit_max_buckets=4000\n";
 }
 
 }  // namespace
@@ -248,6 +256,11 @@ int main() {
         );
 
         require(
+            config.registration_enabled(),
+            "File registration setting was not loaded"
+        );
+
+        require(
             config.auth_login_account_failure_limit() == 4,
             "File account failure limit was not loaded"
         );
@@ -270,6 +283,17 @@ int main() {
         require(
             config.auth_login_max_lockout_seconds() == 120,
             "File maximum login lockout was not loaded"
+        );
+
+        require(
+            config.auth_login_max_tracked_accounts() == 2000 &&
+            config.auth_login_max_tracked_ips() == 3000,
+            "File authentication tracking capacities were not loaded"
+        );
+
+        require(
+            config.http_rate_limit_max_buckets() == 4000,
+            "File rate-limit bucket capacity was not loaded"
         );
 
         require(
@@ -368,6 +392,12 @@ int main() {
         );
 
         ::setenv(
+            "SECURECORE_REGISTRATION_ENABLED",
+            "false",
+            1
+        );
+
+        ::setenv(
             "SECURECORE_AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT",
             "6",
             1
@@ -376,6 +406,24 @@ int main() {
         ::setenv(
             "SECURECORE_AUTH_LOGIN_MAX_LOCKOUT_SECONDS",
             "240",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_AUTH_LOGIN_MAX_TRACKED_ACCOUNTS",
+            "5000",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_AUTH_LOGIN_MAX_TRACKED_IPS",
+            "6000",
+            1
+        );
+
+        ::setenv(
+            "SECURECORE_HTTP_RATE_LIMIT_MAX_BUCKETS",
+            "7000",
             1
         );
 
@@ -455,6 +503,11 @@ int main() {
         );
 
         require(
+            !config.registration_enabled(),
+            "Environment did not override registration"
+        );
+
+        require(
             config.auth_login_account_failure_limit() == 6,
             "Environment did not override account failure limit"
         );
@@ -462,6 +515,17 @@ int main() {
         require(
             config.auth_login_max_lockout_seconds() == 240,
             "Environment did not override maximum lockout"
+        );
+
+        require(
+            config.auth_login_max_tracked_accounts() == 5000 &&
+            config.auth_login_max_tracked_ips() == 6000,
+            "Environment did not override authentication capacities"
+        );
+
+        require(
+            config.http_rate_limit_max_buckets() == 7000,
+            "Environment did not override rate-limit capacity"
         );
 
         require(

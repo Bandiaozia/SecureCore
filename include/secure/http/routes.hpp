@@ -15,7 +15,8 @@ void register_routes(
     ServiceState& service_state,
     UserService& user_service,
     AuthService& auth_service,
-    AuditService& audit_service
+    AuditService& audit_service,
+    bool registration_enabled
 );
 
 }  // namespace secure
